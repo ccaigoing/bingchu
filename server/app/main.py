@@ -17,7 +17,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .config import DEFAULT_WEIGHTS, STATIC_DIR, ensure_dirs
-from .routers import detect
+from .db import init_db
+from .routers import (
+    alert,
+    catalog,
+    detect,
+    effect,
+    monitor,
+    overview,
+    spray,
+    visualize,
+)
 from .services.detector import Detector
 
 logging.basicConfig(
@@ -31,6 +41,10 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """启动即预热模型，避免首个请求承担冷启动代价。"""
     ensure_dirs()
+    # 建表（CREATE TABLE IF NOT EXISTS，不删数据）。
+    # 数据由 `python -m app.seed` 灌入，故意不在这里自动跑 ——
+    # 启动时静默重建数据库会让"改了哪一版数据"变得不可追溯。
+    init_db()
 
     detector = Detector(DEFAULT_WEIGHTS)
     detector.load()
@@ -67,7 +81,20 @@ def create_app() -> FastAPI:
     # 标注图与原图直接静态暴露，前端 <img> 直接引用
     app.mount("/uploads", StaticFiles(directory=str(STATIC_DIR / "uploads")), name="uploads")
 
-    app.include_router(detect.router)
+    # 一屏一路由：每屏的端点在各自模块里，main 只负责挂上来。
+    # catalog 是跨屏共用的字典（类别 / 产品 / 模型登记 / 数据溯源 / 知识条目）。
+    for r in (
+        catalog.router,   # /classes /products /models /datasets /knowledge
+        overview.router,  # /overview
+        monitor.router,   # /monitor /sensors/*
+        detect.router,    # /detect/* /health
+        visualize.router, # /visualize /field/* /analytics/*
+        alert.router,     # /alert /warnings /thresholds
+        spray.router,     # /spray/*
+        effect.router,    # /effect/*
+    ):
+        app.include_router(r)
+
     return app
 
 

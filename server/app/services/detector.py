@@ -117,6 +117,13 @@ class Detection:
 
         不用 asdict() 直接透出 —— 那样会留下 name_cn / class_id 这类蛇形键，
         与 API 契约（驼峰）不一致，前端拿不到 nameCn 就会崩。
+
+        ⚠️ 这里输出的是 `localizationScore` 而**不是** `confidence`。
+        病灶框上的这个数来自 build_detections 的框贴合度（L["purity"]），
+        衡量的是"这个框圈得准不准"，**不是"这个病诊断得对不对"**。
+        诊断置信度来自 YOLO 判型，只在 summary.confidence 上出现。
+        早先两处都叫 confidence，结果一个 96.5% 确诊的稻瘟病在页面上
+        显示成"置信度 37.3%"。名字分开之后这类混淆不可能再发生。
         """
         return {
             "classId": self.class_id,
@@ -124,7 +131,8 @@ class Detection:
             "nameCn": self.name_cn,
             "category": self.category,
             "isPest": self.category == "pest",
-            "confidence": self.confidence,
+            # 框贴合度 —— 定位质量，非诊断置信度
+            "localizationScore": self.confidence,
             "box": {"x": round(self.x, 4), "y": round(self.y, 4),
                     "w": round(self.w, 4), "h": round(self.h, 4)},
             "boxPx": {"x": self.x_px, "y": self.y_px,
@@ -345,16 +353,28 @@ def draw_annotated(image: Image.Image, dets: list[Detection]) -> Image.Image:
 # ═══════════════════════════════════════════════════════════
 
 
-def summarize(dets: list[Detection], img_w: int, img_h: int) -> dict:
+def summarize(
+    dets: list[Detection],
+    img_w: int,
+    img_h: int,
+    type_confidence: float | None = None,
+) -> dict:
     """把原始检测列表压成前端要的 summary。
 
     `regionDesc` 是**真算出来的**（框按 y 聚到上/中/下三带 + 计数），
     不是写死的字符串。
+
+    `type_confidence` 是 **YOLO 判型的诊断置信度**，必须由调用方传进来。
+    不能拿 `dets[0].confidence` 顶替 —— 那是病灶框的贴合度，两者量级差很远
+    （实测：稻瘟病判型 0.965 / 首个病灶框贴合度 0.373），混用会让识别页
+    把一次高置信度的确诊显示成"置信度 37%"。
     """
     if not dets:
         return {
             "topClassName": None, "topClassCode": None, "category": None,
-            "confidence": 0.0, "severityLevel": "good", "severityLabel": "正常",
+            "confidence": type_confidence or 0.0,
+            "localizationScore": None,
+            "severityLevel": "good", "severityLabel": "正常",
             "infectedAreaRatio": 0.0, "spotCount": 0,
             "regionDesc": "未检出病虫害", "advice": "未发现明显病虫害，建议保持常规巡田",
             "recommendedPlanKey": None,
@@ -388,7 +408,10 @@ def summarize(dets: list[Detection], img_w: int, img_h: int) -> dict:
         "topClassName": top.name_cn,
         "topClassCode": top.code,
         "category": top.category,
-        "confidence": top.confidence,
+        # 诊断置信度来自 YOLO；缺省回退到最好的那个框的贴合度，但那是退而求其次
+        "confidence": type_confidence if type_confidence is not None
+        else max(d.confidence for d in dets),
+        "localizationScore": max(d.confidence for d in dets),
         "severityLevel": level,
         "severityLabel": level_cn,
         "infectedAreaRatio": round(infected, 4),

@@ -48,6 +48,34 @@ def _iso(dt: datetime) -> str:
     return dt.isoformat(sep="T")
 
 
+def _narrative_base() -> datetime:
+    """legacy 叙事时间窗（上午 07:30–09:42）的基准日零点。
+
+    ⚠️ 这里**不能**直接用 `_now().replace(hour=0,…)`。
+
+    原 demo 把预警与识别记录的时刻写死在上午 07:30–09:42。套到"今天零点 +
+    这些时刻"上，凌晨播种就会产生**未来时间戳**（实测：机器时间 01:35，
+    数据却写着今天 09:42）。后果不是显示难看，是**排序坏掉**：
+
+      - 识别页「最近 6 条」按 created_at DESC 取，真实上传的记录排在假数据
+        下面，永远看不见 —— 验收标准 6 在界面上直接失效；
+      - 阶段二 2.5 的预警引擎生成的新预警同理，列表顶部永远是这批假数据。
+
+    所以基准日取「叙事时间窗已经过去的最近一天」：下午播种用今天，
+    凌晨播种自动落到昨天。**显示出来的时分与原 demo 逐字一致**
+    （识别记录表仍然显示 09:42:18），而排序永远正确。
+    """
+    now = _now()
+    latest = max(
+        [t for _, _, _, _, t, _ in WARNS]
+        + [t for t, _, _, _, _ in DETECTION_ROWS]
+    )
+    hh, mm = (int(x) for x in latest.split(":")[:2])
+    window_end = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+    day = now if now >= window_end else now - timedelta(days=1)
+    return day.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
 # ═══════════════════════════════════════════════════════════
 # 类别字典 —— 必须与 services/detector.py 的 CANONICAL 逐字一致
 # tools/check_consistency.py 会断言这一点
@@ -287,12 +315,22 @@ SERIES: list[tuple[str, str, str, str | None, str, list[str] | None, list[float]
      ["农药用量 (L/亩)", "防治成本 (元/亩)", "产量 (kg/亩)"], [1.6, 31, 602]),
 ]
 
-# 出处 legacy:610-613
-EFFECT_METRICS: list[tuple[str, str, str, str, str, str]] = [
-    ("pesticide", "农药使用量", "-20", "%", "▼ 减少 20% 以上", "down"),
-    ("yield", "作物产量", "+7.5", "%", "▲ 提升 5%–10%", "up"),
-    ("cost", "防治成本", "-15", "%", "▼ 显著降低", "down"),
-    ("efficiency", "防治效率", "×3.2", "", "▲ 较人工巡查", "up"),
+# ── 指标卡片 ──
+# 只放"算不出来"的头部数字。监测页与预警页的 tile 由 API 从
+# sensor_readings / warnings 现场算，不进这张表（见 schema.sql 的说明）。
+#
+# 概览页出处 legacy:331-334
+# (screen, key, label, value_text, unit, note, tone, series_key)
+KPI_TILES: list[tuple[str, str, str, str, str, str, str, str | None]] = [
+    ("overview", "recog", "今日识别次数", "1,286", "", "▲ +12.4%", "up", "overview.spkRecog"),
+    ("overview", "warn", "今日预警次数", "23", "", "▼ -8.1%", "down", "overview.spkWarn"),
+    ("overview", "area", "覆盖农田面积", "320", " 亩", "▲ +40 亩", "up", "overview.spkArea"),
+    ("overview", "pest", "农药使用量变化", "-20", "%", "▼ 减排达标", "up", "overview.spkPest"),
+    # 效果页出处 legacy:610-613
+    ("effect", "pesticide", "农药使用量", "-20", "%", "▼ 减少 20% 以上", "up", None),
+    ("effect", "yield", "作物产量", "+7.5", "%", "▲ 提升 5%–10%", "up", None),
+    ("effect", "cost", "防治成本", "-15", "%", "▼ 显著降低", "up", None),
+    ("effect", "efficiency", "防治效率", "×3.2", "", "▲ 较人工巡查", "up", None),
 ]
 
 # 出处 legacy:625-629
@@ -420,7 +458,7 @@ def _insert_sensors(conn: sqlite3.Connection) -> None:
 
 
 def _insert_warnings(conn: sqlite3.Connection) -> None:
-    base = _now().replace(hour=0, minute=0, second=0)
+    base = _narrative_base()
     rows = []
     for no, typ, level, area, time_text, status in WARNS:
         hh, mm = (int(x) for x in time_text.split(":"))
@@ -444,7 +482,7 @@ def _insert_detections(conn: sqlite3.Connection) -> None:
     """识别记录（迁移自静态表格）+ 演示样本（含病斑坐标）。"""
     name_of = {c: cn for c, cn, _, _ in CLASSES}
     advice_of = {cls: advice for cls, _, _, _, advice in CLASS_PRODUCTS}
-    base = _now().replace(hour=0, minute=0, second=0)
+    base = _narrative_base()
 
     for idx, (t, cls, conf, sev, sev_cn) in enumerate(DETECTION_ROWS):
         hh, mm, ss = (int(x) for x in t.split(":"))
@@ -519,10 +557,11 @@ def _insert_series(conn: sqlite3.Connection) -> None:
         )
 
     conn.executemany(
-        "INSERT INTO effect_metrics (key, label, value_text, unit, note, tone, sort_order)"
-        " VALUES (?,?,?,?,?,?,?)",
-        [(k, lab, val, unit, note, tone, i)
-         for i, (k, lab, val, unit, note, tone) in enumerate(EFFECT_METRICS)],
+        "INSERT INTO kpi_tiles"
+        " (screen, key, label, value_text, unit, note, tone, series_key, sort_order)"
+        " VALUES (?,?,?,?,?,?,?,?,?)",
+        [(screen, key, lab, val, unit, note, tone, skey, i)
+         for i, (screen, key, lab, val, unit, note, tone, skey) in enumerate(KPI_TILES)],
     )
 
     conn.executemany(

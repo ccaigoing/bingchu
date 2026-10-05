@@ -47,13 +47,14 @@ def show(p: Path) -> None:
     print(f"  模型   : {m['name']} · {m['mode']} · {m['device']} · {d['latencyMs']}ms")
     print(f"  YOLO   : {loc['yoloTopNameCn']} ({loc['yoloTopClass']}) "
           f"conf={loc['yoloConfidence']}  框被忽略={loc['yoloBoxIgnored']}")
-    print(f"  汇总   : {s['topClassName']} · 感染 {s['infectedAreaRatio']*100:.1f}% · "
+    print(f"  汇总   : {s['topClassName']} · 诊断置信度 {s['confidence']*100:.1f}% · "
+          f"感染 {s['infectedAreaRatio']*100:.1f}% · "
           f"{s['spotCount']} 处 · {s['severityLabel']} · {s['regionDesc']}")
     print(f"  建议   : {s['advice']}")
     print(f"  标注图 : {d['image']['annotatedUrl']}")
     for i, o in enumerate(d["detections"]):
         b, bx = o["box"], o["boxPx"]
-        print(f"    [{i:2d}] {o['nameCn']:<6} conf={o['confidence']:.2f} "
+        print(f"    [{i:2d}] {o['nameCn']:<6} 贴合度={o['localizationScore']:.2f} "
               f"box=({b['x']:.3f},{b['y']:.3f},{b['w']:.3f},{b['h']:.3f}) "
               f"px={bx['w']}x{bx['h']} 面积={o['areaRatio']*100:.2f}% {o['region']}")
     print()

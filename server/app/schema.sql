@@ -187,14 +187,20 @@ CREATE INDEX IF NOT EXISTS idx_detection_created ON detection_records(created_at
 
 -- ── 识别记录里的单个框 ────────────────────────────────────
 -- 归一化坐标（左上原点），与原 demo 的 box:[x,y,w,h] 语义完全一致。
+--
+-- ⚠️ 这里的 localization_score 与 detection_records.confidence 是**两个量**：
+--      confidence          = 诊断置信度，来自 YOLO 判型（这张图是什么病）
+--      localization_score  = 框贴合度，来自图像分割（这个框圈得准不准）
+--    实测两者量级差很远（0.965 vs 0.373）。早先两处都叫 confidence，
+--    导致识别页把一次高置信度确诊显示成"置信度 37%"。列名分开杜绝复发。
 CREATE TABLE IF NOT EXISTS detection_objects (
-  id          INTEGER PRIMARY KEY,
-  record_id   INTEGER NOT NULL REFERENCES detection_records(id) ON DELETE CASCADE,
-  seq         INTEGER NOT NULL,
-  class_code  TEXT,
-  name_cn     TEXT NOT NULL,
-  category    TEXT NOT NULL,
-  confidence  REAL NOT NULL,
+  id                 INTEGER PRIMARY KEY,
+  record_id          INTEGER NOT NULL REFERENCES detection_records(id) ON DELETE CASCADE,
+  seq                INTEGER NOT NULL,
+  class_code         TEXT,
+  name_cn            TEXT NOT NULL,
+  category           TEXT NOT NULL,
+  localization_score REAL NOT NULL,
   x           REAL NOT NULL,
   y           REAL NOT NULL,
   w           REAL NOT NULL,
@@ -324,18 +330,27 @@ CREATE TABLE IF NOT EXISTS analysis_points (
 );
 
 
--- ── 效果指标（tile）──────────────────────────────────────
--- value_text 不转数字：'×3.2' 和 '-20' 是展示文案，硬转成浮点反而要带一堆
--- 格式信息回到前端。让后端存的就等于前端要显示的。
-CREATE TABLE IF NOT EXISTS effect_metrics (
+-- ── 指标卡片（tile）──────────────────────────────────────
+-- 概览页与效果页的 tile 共用这一张表。value_text 存**展示文案**而不是数字：
+-- '×3.2' 和 '-20' 要带着千分位、正负号、乘号一起显示，硬转成浮点再转回来
+-- 只会多一层格式信息。让后端存的就等于前端要显示的。
+--
+-- ⚠️ 监测页与预警页的 tile **不在这张表里** —— 它们的值是真能算出来的：
+--    监测页 = 最新一条 sensor_readings，预警页 = warnings 按级别计数。
+--    那两处由 API 现场算，这样 tile 永远不可能和底下的表打架。
+--    这里只放"算不出来"的头部数字（今日识别总次数、减排比例等）。
+CREATE TABLE IF NOT EXISTS kpi_tiles (
   id          INTEGER PRIMARY KEY,
-  key         TEXT NOT NULL UNIQUE,
+  screen      TEXT NOT NULL,
+  key         TEXT NOT NULL,
   label       TEXT NOT NULL,
   value_text  TEXT NOT NULL,
   unit        TEXT NOT NULL DEFAULT '',
   note        TEXT NOT NULL,
   tone        TEXT NOT NULL CHECK(tone IN ('up','down')),
-  sort_order  INTEGER NOT NULL DEFAULT 0
+  series_key  TEXT,                        -- 关联的 sparkline，可空
+  sort_order  INTEGER NOT NULL DEFAULT 0,
+  UNIQUE(screen, key)
 );
 
 

@@ -58,7 +58,7 @@
   <div>
     <dl class="kv" id="kv"></dl>
     <table id="tbl">
-      <thead><tr><th>类别</th><th>类别码</th><th>置信度</th><th>区域</th><th>面积占比</th></tr></thead>
+      <thead><tr><th>类别</th><th>类别码</th><th>框贴合度</th><th>区域</th><th>面积占比</th></tr></thead>
       <tbody></tbody>
     </table>
   </div>
@@ -145,7 +145,7 @@ function render(d, rtt) {
     <tr>
       <td>${x.nameCn}</td>
       <td style="color:#888">${x.code}</td>
-      <td>${(x.confidence * 100).toFixed(1)}%</td>
+      <td>${(x.localizationScore * 100).toFixed(1)}%</td>
       <td>${({top:'上方',mid:'中部',bottom:'下方'})[x.region] || x.region}</td>
       <td>${(x.areaRatio * 100).toFixed(1)}%</td>
     </tr>`).join('') || '<tr><td colspan="5" style="color:#888">无检出</td></tr>';
