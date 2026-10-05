@@ -1,0 +1,20 @@
+# 行尾统一成 LF 存进仓库。
+#
+# Windows 上不配这个的话有两个问题：
+#   1. 每次 git add 都刷一屏 "LF will be replaced by CRLF" 警告，把真正的
+#      改动淹没掉
+#   2. 不同机器（或 WSL / CI）检出的行尾不一致，会产生整文件级 diff 噪声
+#
+# 本项目的源码是 TS / Python / CSS / SQL，没有任何需要 CRLF 的 .bat/.cmd。
+* text=auto eol=lf
+
+# 二进制文件不做任何行尾与编码转换
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.jfif binary
+*.ico  binary
+*.pt   binary
+*.db   binary
+*.woff binary
+*.woff2 binary

@@ -1,0 +1,47 @@
+# ── 前端 ──
+node_modules
+dist
+dist-ssr
+*.local
+
+# ── Python 后端 ──
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# ── 运行时产物（都不是源码）──
+# 上传的图片与标注图：每次检测都会新增，不进版本库
+server/static/uploads/
+# SQLite 库文件（含 WAL/SHM）
+server/data/*.db
+server/data/*.db-wal
+server/data/*.db-shm
+
+# ── 模型权重 ──
+# jktk_x.pt 有 457MB，远超 GitHub 单文件上限，不进版本库。
+# 获取方式写在 models/README.md 里。
+models/*.pt
+models/*.onnx
+
+# ── 工具的一次性输出 ──
+tools/_*.png
+tools/_*.json
+tools/_classes.txt
+
+# ── 编辑器 / 系统 ──
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

@@ -1,0 +1,30 @@
+/* ═══════════════════════════════════════════════════════════
+   全局样式入口
+   ═══════════════════════════════════════════════════════════
+
+   导入顺序（与参照项目 huajian-xinsheng 一致：自定义 CSS 在前、
+   tailwindcss 在后）：
+
+     tokens.css      设计令牌（纯 CSS 变量）
+     components.css  原演示页的全部组件类 —— **刻意不加 @layer**
+     tailwindcss     Tailwind v4（CSS-first，无 tailwind.config.js）
+
+   ★ 为什么「components.css 不包 @layer」是关键：
+   Tailwind 4 把 preflight 放在 `@layer base`。CSS 层叠规则里
+   **未分层的样式永远胜过任何 @layer 内的规则** —— 所以我们的
+   components.css 会稳定压过 preflight，原设计（`.card h3::before`
+   伪元素、`table` 的 border-collapse、`*` 的 margin/padding 归零）
+   不会被 reset 冲掉。
+   这一点**与导入先后顺序无关**：层优先级先于源顺序判定。
+
+   ⚠️ 代价（必须知道）：未分层同样胜过 `@layer utilities`。
+   也就是说在同一个元素上，`.card` 的 padding/background 会盖掉
+   `p-4` / `bg-white` 这类工具类。所以组件主体一律用 components.css
+   里的原类名，Tailwind 只用于原设计没有的小布局微调；需要用到设计
+   令牌时走任意值语法 `bg-[var(--accent)]`（huajian 也是这么用的，
+   因此本项目**不建 @theme 色板**，少一层出错的余地）。
+   ═══════════════════════════════════════════════════════════ */
+
+@import './tokens.css';
+@import './components.css';
+@import 'tailwindcss';

@@ -1,0 +1,1167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>“机”到病除 —— AI 病虫害诊断系统 · 演示</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<style>
+  :root{
+    --page:#f9f9f7;
+    --surface:#fcfcfb;
+    --card:#ffffff;
+    --ink:#0b0b0b;
+    --ink2:#52514e;
+    --muted:#898781;
+    --grid:#e1e0d9;
+    --axis:#c3c2b7;
+    --border:rgba(11,11,11,0.10);
+    --wash:rgba(11,11,11,0.04);
+    --shadow:0 1px 2px rgba(11,11,11,0.04), 0 6px 20px rgba(11,11,11,0.06);
+    --shadow-lg:0 2px 6px rgba(11,11,11,0.05), 0 14px 36px rgba(11,11,11,0.10);
+    --stage-top:#eef7f0;
+
+    --brand:#14532d;
+    --brand2:#166534;
+    --accent:#2f9e6b;
+    --accent-soft:rgba(47,158,107,0.14);
+
+    --good:#0ca30c;
+    --warning:#fab219;
+    --serious:#ec835a;
+    --critical:#d03b3b;
+
+    --sidebar:#0e2b1c;
+    --sidebar-2:#0a2015;
+    --sidebar-ink:#d7e7dc;
+    --sidebar-muted:#87a393;
+    --sidebar-active:#16a34a;
+  }
+  [data-theme="dark"]{
+    --page:#0d0d0d;
+    --surface:#1a1a19;
+    --card:#1a1a19;
+    --ink:#ffffff;
+    --ink2:#c3c2b7;
+    --muted:#898781;
+    --grid:#2c2c2a;
+    --axis:#383835;
+    --border:rgba(255,255,255,0.10);
+    --wash:rgba(255,255,255,0.05);
+    --shadow:0 1px 2px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.5);
+    --shadow-lg:0 2px 8px rgba(0,0,0,0.5), 0 16px 40px rgba(0,0,0,0.6);
+    --stage-top:#14201a;
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0}
+  .ico{fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;display:inline-block;vertical-align:middle}
+  .mark svg{stroke:#fff}
+  html,body{height:100%}
+  body{
+    font-family:system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--page);color:var(--ink);
+    display:flex;overflow:hidden;
+    font-size:14px;line-height:1.55;
+  }
+
+  /* ===== Sidebar ===== */
+  .sidebar{
+    width:236px;min-width:236px;height:100vh;
+    background:linear-gradient(180deg,var(--sidebar),var(--sidebar-2));
+    color:var(--sidebar-ink);
+    display:flex;flex-direction:column;
+    position:relative;z-index:5;
+  }
+  .brand{padding:22px 20px 18px;border-bottom:1px solid rgba(255,255,255,0.08)}
+  .brand .logo{display:flex;align-items:center;gap:10px}
+  .brand .logo .mark{
+    width:38px;height:38px;border-radius:10px;flex:none;
+    background:linear-gradient(135deg,#2f9e6b,#16a34a);
+    display:flex;align-items:center;justify-content:center;font-size:20px;
+  }
+  .brand h1{font-size:16px;font-weight:700;letter-spacing:1px;color:#fff}
+  .brand p{font-size:11px;color:var(--sidebar-muted);margin-top:3px;letter-spacing:.5px}
+  .nav{flex:1;padding:12px 10px;overflow-y:auto}
+  .nav::-webkit-scrollbar{width:6px}
+  .nav::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.15);border-radius:3px}
+  .nav .grp{font-size:10px;color:var(--sidebar-muted);letter-spacing:1.5px;padding:14px 12px 6px;text-transform:uppercase}
+  .nav-item{
+    display:flex;align-items:center;gap:11px;width:100%;
+    padding:10px 12px;margin:2px 0;border-radius:9px;border:none;background:none;
+    color:var(--sidebar-ink);cursor:pointer;text-align:left;
+    font-size:13.5px;transition:background .15s,color .15s;
+    position:relative;
+  }
+  .nav-item .ic{width:20px;text-align:center;font-size:15px;flex:none}
+  .nav-item:hover{background:rgba(255,255,255,0.07)}
+  .nav-item.active{background:rgba(22,163,74,0.22);color:#fff;font-weight:600}
+  .nav-item.active::before{content:"";position:absolute;left:-10px;top:7px;bottom:7px;width:3px;border-radius:2px;background:#4ade80}
+  .nav-item.active .ic{filter:brightness(1.2)}
+  .sidebar .foot{padding:14px 20px;border-top:1px solid rgba(255,255,255,0.08);font-size:11px;color:var(--sidebar-muted)}
+
+  /* ===== Main ===== */
+  .main{flex:1;height:100vh;display:flex;flex-direction:column;min-width:0}
+  .topbar{
+    height:58px;flex:none;display:flex;align-items:center;gap:14px;
+    padding:0 24px;background:var(--surface);border-bottom:1px solid var(--border);
+    box-shadow:0 4px 20px rgba(11,11,11,0.04);position:relative;z-index:4;
+  }
+  .topbar .title{font-size:17px;font-weight:700;letter-spacing:.5px}
+  .topbar .sub{font-size:12px;color:var(--muted);margin-left:2px}
+  .topbar .spacer{flex:1}
+  .pill{
+    display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--ink2);
+    padding:6px 12px;border:1px solid var(--border);border-radius:999px;background:var(--page);
+  }
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--good);box-shadow:0 0 0 3px rgba(12,163,12,0.18)}
+  .dot.pulse{animation:pulse 1.6s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(12,163,12,0.35)}70%{box-shadow:0 0 0 6px rgba(12,163,12,0)}100%{box-shadow:0 0 0 0 rgba(12,163,12,0)}}
+  .iconbtn{
+    width:34px;height:34px;border-radius:9px;border:1px solid var(--border);
+    background:var(--page);cursor:pointer;font-size:15px;color:var(--ink2);
+    display:flex;align-items:center;justify-content:center;transition:background .15s;
+  }
+  .iconbtn:hover{background:var(--wash)}
+
+  .content{flex:1;overflow-y:auto;padding:22px 24px 40px}
+  .content::-webkit-scrollbar{width:9px}
+  .content::-webkit-scrollbar-thumb{background:var(--axis);border-radius:5px}
+
+  .screen{display:none;animation:fade .25s ease}
+  .screen.active{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+  /* ===== Layout helpers ===== */
+  .grid{display:grid;gap:16px}
+  .g-4{grid-template-columns:repeat(4,1fr)}
+  .g-3{grid-template-columns:repeat(3,1fr)}
+  .g-2{grid-template-columns:repeat(2,1fr)}
+  .g-21{grid-template-columns:2fr 1fr}
+  .g-12{grid-template-columns:1fr 2fr}
+  .g-11{grid-template-columns:1fr 1fr}
+  .col-2{grid-column:span 2}
+  @media(max-width:1080px){.g-4{grid-template-columns:repeat(2,1fr)}.g-3{grid-template-columns:1fr}.g-21,.g-12,.g-11{grid-template-columns:1fr}.col-2{grid-column:span 1}}
+
+  .card{
+    background:var(--surface);border:1px solid var(--border);border-radius:16px;
+    padding:20px 22px;box-shadow:var(--shadow);
+    transition:box-shadow .2s ease;
+  }
+  .card:hover{box-shadow:var(--shadow-lg)}
+  .card h3{font-size:15px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+  .card h3::before{content:"";width:4px;height:15px;border-radius:2px;background:var(--accent);flex:none}
+  .card h3 .tag{font-size:11px;color:var(--muted);font-weight:500}
+  .card .hint{font-size:12px;color:var(--muted);margin-bottom:14px}
+  .chart{width:100%;height:280px}
+
+  /* stat tiles */
+  .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  @media(max-width:1080px){.tiles{grid-template-columns:repeat(2,1fr)}}
+  .tile{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:18px 20px;position:relative;overflow:hidden;box-shadow:var(--shadow);transition:box-shadow .2s ease}
+  .tile:hover{box-shadow:var(--shadow-lg)}
+  .tile .lab{font-size:12.5px;color:var(--ink2);font-weight:500}
+  .tile .val{font-size:32px;font-weight:700;letter-spacing:-.5px;margin:8px 0 3px;font-variant-numeric:proportional-nums}
+  .tile .unit{font-size:13px;color:var(--muted);font-weight:500}
+  .tile .delta{font-size:12px;display:inline-flex;align-items:center;gap:4px;margin-top:2px;color:var(--ink2)}
+  .tile .delta.up{color:var(--good)}.tile .delta.down{color:var(--critical)}
+  .tile .spark{position:absolute;right:14px;bottom:14px;width:96px;height:36px}
+  .tile .badge{position:absolute;top:14px;right:14px}
+
+  /* status badge */
+  .st{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px}
+  .st::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+  .st.critical{color:var(--critical);background:rgba(208,59,59,0.12)}
+  .st.serious{color:var(--serious);background:rgba(236,131,90,0.14)}
+  .st.warning{color:#a97a00;background:rgba(250,178,25,0.16)}
+  .st.good{color:var(--good);background:rgba(12,163,12,0.12)}
+
+  /* flow diagram */
+  .flow{display:flex;align-items:center;gap:0;flex-wrap:wrap}
+  .flow .node{
+    flex:1;min-width:110px;background:var(--card);border:1px solid var(--border);
+    border-radius:12px;padding:14px 12px;text-align:center;position:relative;
+  }
+  .flow .node .n-ic{font-size:22px;display:block;margin-bottom:6px}
+  .flow .node .n-t{font-size:13px;font-weight:600}
+  .flow .node .n-d{font-size:11px;color:var(--muted);margin-top:2px}
+  .flow .arrow{flex:none;width:26px;text-align:center;color:var(--muted);font-size:16px}
+
+  /* tables */
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{text-align:left;color:var(--muted);font-weight:600;font-size:11.5px;padding:8px 10px;border-bottom:1px solid var(--border)}
+  td{padding:9px 10px;border-bottom:1px solid var(--grid);color:var(--ink2)}
+  tr:last-child td{border-bottom:none}
+  td.mono,th.mono{font-variant-numeric:tabular-nums}
+  .tbl-wrap{overflow-x:auto}
+
+  /* buttons & inputs */
+  .btn{
+    display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;
+    padding:9px 16px;border-radius:10px;border:1px solid var(--border);
+    background:var(--card);color:var(--ink);cursor:pointer;transition:all .15s;
+  }
+  .btn:hover{border-color:var(--accent);color:var(--accent)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.primary:hover{background:var(--brand);border-color:var(--brand);color:#fff}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+
+  .chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:6px 13px;border-radius:999px;border:1px solid var(--border);background:var(--card);color:var(--ink2);cursor:pointer;transition:all .15s}
+  .chip.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+
+  input[type=range]{width:100%;accent-color:var(--accent)}
+
+  /* leaf stage */
+  .stage{background:linear-gradient(180deg,var(--stage-top),var(--surface));border-radius:12px;border:1px solid var(--border);position:relative;overflow:hidden;min-height:340px}
+  .stage svg{display:block;width:100%;height:auto}
+  .thumbs{display:flex;gap:10px;margin-top:12px}
+  .thumb{flex:1;border:1px solid var(--border);border-radius:10px;padding:8px;cursor:pointer;text-align:center;background:var(--card);transition:all .15s}
+  .thumb:hover{border-color:var(--accent)}
+  .thumb.on{border-color:var(--accent);background:var(--accent-soft)}
+  .thumb .t-n{font-size:12.5px;font-weight:600}
+  .thumb .t-c{font-size:11px;color:var(--muted);margin-top:2px}
+
+  /* meter */
+  .meter{height:12px;border-radius:6px;background:var(--grid);overflow:hidden;margin:8px 0 4px}
+  .meter .fill{height:100%;border-radius:6px;background:var(--accent);transition:width .5s ease}
+  .meter .fill.high{background:var(--critical)}
+
+  /* field map */
+  .fieldmap{display:grid;grid-template-columns:repeat(8,1fr);gap:5px}
+  .plot{aspect-ratio:1;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;color:rgba(255,255,255,0.85);font-weight:600;cursor:pointer;transition:transform .12s}
+  .plot:hover{transform:scale(1.08)}
+  .legend-ramp{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);margin-top:12px}
+  .legend-ramp .ramp{flex:1;height:8px;border-radius:4px;background:linear-gradient(90deg,#cde2fb,#3987e5,#0d366b)}
+
+  /* timeline */
+  .timeline{position:relative;padding-left:26px}
+  .timeline::before{content:"";position:absolute;left:8px;top:6px;bottom:6px;width:2px;background:var(--grid)}
+  .tl-item{position:relative;padding:0 0 22px 12px}
+  .tl-item::before{content:"";position:absolute;left:-24px;top:5px;width:12px;height:12px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .tl-item.done::before{background:var(--good);box-shadow:0 0 0 3px rgba(12,163,12,0.15)}
+  .tl-item .t-h{font-weight:700;font-size:14px}
+  .tl-item .t-s{font-size:11px;color:var(--muted);margin-left:8px}
+  .tl-item .t-d{font-size:12.5px;color:var(--ink2);margin-top:4px;max-width:720px}
+
+  /* arch diagram */
+  .layer{border:1px solid var(--border);border-radius:12px;padding:14px 16px;background:var(--card)}
+  .layer .l-h{font-weight:700;font-size:13px;margin-bottom:10px;display:flex;align-items:center;gap:8px;color:var(--ink)}
+  .layer .l-h .l-ic{width:24px;height:24px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;background:var(--accent-soft);font-size:13px}
+  .boxes{display:flex;flex-wrap:wrap;gap:8px}
+  .box{border:1px solid var(--border);border-radius:9px;padding:9px 12px;font-size:12px;background:var(--page);color:var(--ink2)}
+  .box b{color:var(--ink);display:block;font-size:12.5px}
+  .box span{font-size:11px;color:var(--muted)}
+  .conn{text-align:center;color:var(--muted);font-size:14px;padding:3px 0}
+
+  .kv{display:grid;grid-template-columns:110px 1fr;row-gap:7px;column-gap:12px;font-size:12.5px}
+  .kv dt{color:var(--muted)}
+  .kv dd{color:var(--ink2)}
+
+  .banner{background:var(--accent-soft);border:1px solid var(--accent);color:var(--ink);border-radius:10px;padding:10px 14px;font-size:12.5px;margin-bottom:16px}
+
+  .hero{font-size:46px;font-weight:700;letter-spacing:-1px;line-height:1.1}
+  .muted{color:var(--muted)}
+</style>
+</head>
+<body>
+<!-- icon sprite -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="i-activity" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-bar" viewBox="0 0 24 24"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-droplet" viewBox="0 0 24 24"><path d="M12 2.7 6.3 8.4a8 8 0 1 0 11.4 0z"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 2 10 5-10 5L2 7z"/><path d="m2 12 10 5 10-5"/><path d="M2 17l10 5 10-5"/></symbol>
+  <symbol id="i-map" viewBox="0 0 24 24"><path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4z"/><path d="M8 2v16"/><path d="M16 6v16"/></symbol>
+  <symbol id="i-trend" viewBox="0 0 24 24"><path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/></symbol>
+  <symbol id="i-flask" viewBox="0 0 24 24"><path d="M10 2v6L4.5 20a2 2 0 0 0 1.8 3h11.4a2 2 0 0 0 1.8-3L14 8V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.5 9a9 9 0 0 1 14.8-3.4L23 10"/><path d="M1 14l4.7 4.4A9 9 0 0 0 20.5 15"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></symbol>
+  <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M5 12.5a10 10 0 0 1 14 0"/><path d="M1.5 8.5a16 16 0 0 1 21 0"/><path d="M8.5 16a5 5 0 0 1 7 0"/><path d="M12 20h.01"/></symbol>
+  <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9.5" y="9.5" width="5" height="5"/><path d="M9 2v3"/><path d="M15 2v3"/><path d="M9 19v3"/><path d="M15 19v3"/><path d="M2 9h3"/><path d="M2 15h3"/><path d="M19 9h3"/><path d="M19 15h3"/></symbol>
+  <symbol id="i-leaf" viewBox="0 0 24 24"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.5 19 2c1 2 2 4.2 2 8 0 5.5-4.8 10-10 10z"/><path d="M2 21c0-3 1.9-5.4 5.1-6C9.5 14.5 12 13 13 12"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.9 4.9l1.4 1.4"/><path d="M17.7 17.7l1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M4.9 19.1l1.4-1.4"/><path d="M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></symbol>
+</svg>
+
+<!-- ===== Sidebar ===== -->
+<aside class="sidebar">
+  <div class="brand">
+    <div class="logo">
+      <div class="mark"><svg class="ico" viewBox="0 0 24 24" width="20" height="20"><use href="#i-leaf"/></svg></div>
+      <div>
+        <h1>“机”到病除</h1>
+        <p>AI 病虫害诊断系统</p>
+      </div>
+    </div>
+  </div>
+  <nav class="nav">
+    <div class="grp">系统</div>
+    <button class="nav-item active" data-screen="overview"><span class="ic"><svg class="ico" viewBox="0 0 24 24" width="18" height="18"><use href="#i-home"/></svg></span>系统概览</button>
+    <div class="grp">核心功能</div>
+    <button class="nav-item" data-screen="monitor"><span class="ic"><svg class="ico" viewBox="0 0 24 24" width="18" height="18"><use href="#i-activity"/></svg></span>实时监测</button>
+    <button class="nav-item" data-screen="identify"><span class="ic"><svg class="ico" viewBox="0 0 24 24" width="18" height="18"><use href="#i-search"/></svg></span>病虫害识别</button>
+    <button class="nav-item" data-screen="visualize"><span class="ic"><svg class="ico" viewBox="0 0 24 24" width="18" height="18"><use href="#i-bar"/></svg></span>数据可视化</button>
+    <button class="nav-item" data-screen="alert"><span class="ic"><svg class="ico" viewBox="0 0 24 24" width="18" height="18"><use href="#i-alert"/></svg></span>预警系统</button>
+    <button class="nav-item" data-screen="spray"><span class="ic"><svg class="ico" viewBox="0 0 24 24" width="18" height="18"><use href="#i-droplet"/></svg></span>喷洒方案与执行</button>
+    <button class="nav-item" data-screen="effect"><span class="ic"><svg class="ico" viewBox="0 0 24 24" width="18" height="18"><use href="#i-trend"/></svg></span>预期效果与评估</button>
+  </nav>
+  <div class="foot">乡村振兴 · 农业农村现代化赛道</div>
+</aside>
+
+<!-- ===== Main ===== -->
+<div class="main">
+  <header class="topbar">
+    <div>
+      <span class="title" id="pageTitle">系统概览</span>
+      <span class="sub" id="pageSub">Overview</span>
+    </div>
+    <div class="spacer"></div>
+    <span class="pill"><span class="dot pulse"></span>系统运行中</span>
+    <span class="pill" id="clock">--:--:--</span>
+    <button class="iconbtn" id="themeBtn" title="切换主题"></button>
+  </header>
+
+  <main class="content">
+
+    <!-- ============ 系统概览 ============ -->
+    <section class="screen active" id="screen-overview">
+      <div class="tiles">
+        <div class="tile"><div class="lab">今日识别次数</div><div class="val" id="ovRecog">1,286</div><span class="delta up">▲ +12.4%</span><div class="spark" id="spkRecog"></div></div>
+        <div class="tile"><div class="lab">今日预警次数</div><div class="val" id="ovWarn">23</div><span class="delta down">▼ -8.1%</span><div class="spark" id="spkWarn"></div></div>
+        <div class="tile"><div class="lab">覆盖农田面积</div><div class="val">320<span class="unit"> 亩</span></div><span class="delta up">▲ +40 亩</span><div class="spark" id="spkArea"></div></div>
+        <div class="tile"><div class="lab">农药使用量变化</div><div class="val" style="color:var(--good)">-20<span class="unit">%</span></div><span class="delta up">▼ 减排达标</span><div class="spark" id="spkPest"></div></div>
+      </div>
+
+      <div class="grid g-21" style="margin-top:16px">
+        <div class="card">
+          <h3>病虫害防治闭环 <span class="tag">监测 → 识别 → 预警 → 方案 → 喷洒 → 反馈</span></h3>
+          <p class="hint">系统通过无人机与传感器实现从诊断到治理的完整闭环</p>
+          <div class="flow">
+            <div class="node"><span class="n-ic"><svg class="ico" viewBox="0 0 24 24" width="22" height="22"><use href="#i-activity"/></svg></span><div class="n-t">实时监测</div><div class="n-d">传感器数据采集</div></div>
+            <div class="arrow">→</div>
+            <div class="node"><span class="n-ic"><svg class="ico" viewBox="0 0 24 24" width="22" height="22"><use href="#i-search"/></svg></span><div class="n-t">病虫害识别</div><div class="n-d">改进 YOLOv5</div></div>
+            <div class="arrow">→</div>
+            <div class="node"><span class="n-ic"><svg class="ico" viewBox="0 0 24 24" width="22" height="22"><use href="#i-alert"/></svg></span><div class="n-t">预警系统</div><div class="n-d">阈值触发告警</div></div>
+            <div class="arrow">→</div>
+            <div class="node"><span class="n-ic"><svg class="ico" viewBox="0 0 24 24" width="22" height="22"><use href="#i-flask"/></svg></span><div class="n-t">喷洒方案</div><div class="n-d">LSTM 生成方案</div></div>
+            <div class="arrow">→</div>
+            <div class="node"><span class="n-ic"><svg class="ico" viewBox="0 0 24 24" width="22" height="22"><use href="#i-send"/></svg></span><div class="n-t">精准喷洒</div><div class="n-d">无人机执行</div></div>
+            <div class="arrow">→</div>
+            <div class="node"><span class="n-ic"><svg class="ico" viewBox="0 0 24 24" width="22" height="22"><use href="#i-refresh"/></svg></span><div class="n-t">反馈优化</div><div class="n-d">动态调整策略</div></div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>病虫害类型占比 <span class="tag">近 30 日</span></h3>
+          <div class="chart" id="ovPie" style="height:252px"></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <h3>近 7 日病虫害预警趋势</h3>
+        <div class="chart" id="ovTrend" style="height:260px"></div>
+      </div>
+    </section>
+
+    <!-- ============ 实时监测 ============ -->
+    <section class="screen" id="screen-monitor">
+      <div class="tiles">
+        <div class="tile"><div class="lab">空气温度</div><div class="val" id="mTemp">26.4<span class="unit">℃</span></div><span class="delta up">正常</span><div class="spark" id="spkTemp"></div></div>
+        <div class="tile"><div class="lab">空气湿度</div><div class="val" id="mHum">62<span class="unit">%</span></div><span class="delta up">正常</span><div class="spark" id="spkHum"></div></div>
+        <div class="tile"><div class="lab">土壤 pH</div><div class="val" id="mPh">6.3<span class="unit"></span></div><span class="delta up">适宜</span><div class="spark" id="spkPh"></div></div>
+        <div class="tile"><div class="lab">光谱光照</div><div class="val" id="mLight">38.0<span class="unit">kLx</span></div><span class="delta up">正常</span><div class="spark" id="spkLight"></div></div>
+      </div>
+
+      <div class="grid g-21" style="margin-top:16px">
+        <div class="card">
+          <h3>温度实时趋势 <span class="tag">最近 30 个采样点</span></h3>
+          <div class="chart" id="mChartTemp"></div>
+        </div>
+        <div class="card">
+          <h3>无人机飞行状态</h3>
+          <div class="grid g-11">
+            <div class="stage" style="min-height:0;display:flex;align-items:center;justify-content:center;padding:12px">
+              <svg viewBox="0 0 200 140" width="180">
+                <g id="droneSvg">
+                  <line x1="100" y1="70" x2="100" y2="28" stroke="var(--accent)" stroke-width="2"/>
+                  <line x1="100" y1="70" x2="64" y2="104" stroke="var(--accent)" stroke-width="2"/>
+                  <line x1="100" y1="70" x2="136" y2="104" stroke="var(--accent)" stroke-width="2"/>
+                  <circle cx="100" cy="70" r="7" fill="var(--accent)"/>
+                  <circle cx="100" cy="24" r="15" fill="none" stroke="var(--accent)" stroke-width="2" opacity="0.5">
+                    <animate attributeName="r" values="12;18;12" dur="1.4s" repeatCount="indefinite"/>
+                  </circle>
+                  <circle cx="60" cy="100" r="15" fill="none" stroke="var(--accent)" stroke-width="2" opacity="0.5">
+                    <animate attributeName="r" values="12;18;12" dur="1.4s" begin="0.4s" repeatCount="indefinite"/>
+                  </circle>
+                  <circle cx="140" cy="100" r="15" fill="none" stroke="var(--accent)" stroke-width="2" opacity="0.5">
+                    <animate attributeName="r" values="12;18;12" dur="1.4s" begin="0.8s" repeatCount="indefinite"/>
+                  </circle>
+                </g>
+              </svg>
+            </div>
+            <div class="kv">
+              <dt>飞行状态</dt><dd><span class="st good">喷洒作业中</span></dd>
+              <dt>当前高度</dt><dd id="dAlt">12.4 m</dd>
+              <dt>飞行速度</dt><dd id="dSpd">4.2 m/s</dd>
+              <dt>剩余电量</dt><dd><div class="meter" style="margin:4px 0 0"><div class="fill" id="dBat" style="width:76%"></div></div></dd>
+              <dt>作业区域</dt><dd>3 号试验田 · 东区</dd>
+              <dt>航线类型</dt><dd>卡尔曼滤波 + PID 航迹</dd>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid g-21" style="margin-top:16px">
+        <div class="card">
+          <h3>湿度实时趋势 <span class="tag">最近 30 个采样点</span></h3>
+          <div class="chart" id="mChartHum"></div>
+        </div>
+        <div class="card">
+          <h3>实时数据流 <span class="tag">最新 8 条</span></h3>
+          <div class="tbl-wrap"><table id="streamTable">
+            <thead><tr><th>时间</th><th>温度</th><th>湿度</th><th>pH</th><th>光照</th></tr></thead>
+            <tbody></tbody>
+          </table></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 病虫害识别 ============ -->
+    <section class="screen" id="screen-identify">
+      <div class="grid g-12">
+        <div class="card">
+          <h3>作物图像 <span class="tag">无人机高清摄像头采集</span></h3>
+          <div class="stage" id="leafStage"></div>
+          <div class="thumbs" id="thumbs"></div>
+          <div style="margin-top:14px;display:flex;gap:10px">
+            <button class="btn primary" id="btnDetect"><svg class="ico" viewBox="0 0 24 24" width="15" height="15"><use href="#i-search"/></svg>开始识别</button>
+            <button class="btn" id="btnCycle"><svg class="ico" viewBox="0 0 24 24" width="15" height="15"><use href="#i-refresh"/></svg>切换样本</button>
+          </div>
+        </div>
+        <div class="card">
+          <h3>识别结果 <span class="tag">改进 YOLOv5</span></h3>
+          <div style="margin-top:6px">
+            <div class="lab muted">诊断结果</div>
+            <div class="hero" id="resName">稻瘟病</div>
+            <div style="margin:8px 0 2px;display:flex;align-items:center;justify-content:space-between">
+              <span class="muted">置信度</span><span id="resConf" style="font-weight:700">96.2%</span>
+            </div>
+            <div class="meter"><div class="fill" id="resConfBar" style="width:96%"></div></div>
+            <div class="kv" style="margin-top:14px">
+              <dt>严重程度</dt><dd id="resSev"><span class="st critical">严重</span></dd>
+              <dt>感染区域</dt><dd id="resArea">叶片中部 · 3 处病斑</dd>
+              <dt>感染面积占比</dt><dd id="resRatio">18.6%</dd>
+              <dt>建议措施</dt><dd id="resAdvice">立即喷洒三环唑，用量 40g/亩</dd>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid g-21" style="margin-top:16px">
+        <div class="card">
+          <h3>各类病虫害识别次数 <span class="tag">近 30 日</span></h3>
+          <div class="chart" id="idChart"></div>
+        </div>
+        <div class="card">
+          <h3>识别记录 <span class="tag">最近 6 条</span></h3>
+          <div class="tbl-wrap"><table>
+            <thead><tr><th>时间</th><th>病害类型</th><th>置信度</th><th>级别</th></tr></thead>
+            <tbody>
+              <tr><td>09:42:18</td><td>稻瘟病</td><td class="mono">96.2%</td><td><span class="st critical">严重</span></td></tr>
+              <tr><td>09:38:05</td><td>稻曲病</td><td class="mono">91.8%</td><td><span class="st serious">较重</span></td></tr>
+              <tr><td>09:31:47</td><td>草地贪夜蛾为害</td><td class="mono">93.4%</td><td><span class="st critical">严重</span></td></tr>
+              <tr><td>09:26:12</td><td>白叶枯病</td><td class="mono">88.7%</td><td><span class="st warning">一般</span></td></tr>
+              <tr><td>09:19:33</td><td>稻瘟病</td><td class="mono">95.1%</td><td><span class="st critical">严重</span></td></tr>
+              <tr><td>09:14:50</td><td>稻曲病</td><td class="mono">90.3%</td><td><span class="st serious">较重</span></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 数据可视化 ============ -->
+    <section class="screen" id="screen-visualize">
+      <div class="card">
+        <h3>近 30 日病虫害发生率趋势 <span class="tag">单位：%</span></h3>
+        <div class="chart" id="vzTrend" style="height:300px"></div>
+      </div>
+      <div class="grid g-21" style="margin-top:16px">
+        <div class="card">
+          <h3>农田地块病虫害严重程度分布 <span class="tag">3 号试验田 · 8×6 地块</span></h3>
+          <p class="hint">地块标注「X排X号」：排为自上而下第几排、号为自左向右第几号；仅标注中度及以上地块。</p>
+          <div class="fieldmap" id="fieldMap"></div>
+          <div class="legend-ramp"><span>低</span><div class="ramp"></div><span>高</span></div>
+        </div>
+        <div class="card">
+          <h3>农药使用量 · 使用前后对比 <span class="tag">单位：L/亩</span></h3>
+          <div class="chart" id="vzBar" style="height:252px"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 预警系统 ============ -->
+    <section class="screen" id="screen-alert">
+      <div class="tiles">
+        <div class="tile"><div class="lab">严重预警</div><div class="val" id="alCritical" style="color:var(--critical)">3</div><span class="st critical">需立即处理</span></div>
+        <div class="tile"><div class="lab">较重预警</div><div class="val" id="alSerious" style="color:var(--serious)">5</div><span class="st serious">今日处理中</span></div>
+        <div class="tile"><div class="lab">一般预警</div><div class="val" id="alWarning" style="color:#a97a00">9</div><span class="st warning">持续关注</span></div>
+        <div class="tile"><div class="lab">今日已处理</div><div class="val" id="alDone" style="color:var(--good)">14</div><span class="st good">闭环完成</span></div>
+      </div>
+
+      <div class="grid g-21" style="margin-top:16px">
+        <div class="card">
+          <h3>预警列表</h3>
+          <div style="display:flex;gap:8px;margin:10px 0 14px;flex-wrap:wrap">
+            <button class="chip on" data-filter="all">全部</button>
+            <button class="chip" data-filter="critical">严重</button>
+            <button class="chip" data-filter="serious">较重</button>
+            <button class="chip" data-filter="warning">一般</button>
+            <button class="chip" data-filter="undone">未处理</button>
+          </div>
+          <div class="tbl-wrap"><table id="warnTable">
+            <thead><tr><th>预警 ID</th><th>类型</th><th>级别</th><th>位置</th><th>时间</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody></tbody>
+          </table></div>
+        </div>
+        <div class="card">
+          <h3>预警阈值设置</h3>
+          <p class="hint">达到阈值时系统自动触发预警推送</p>
+          <div class="kv" style="grid-template-columns:1fr">
+            <div><div style="display:flex;justify-content:space-between"><span>温度上限</span><span id="thTempV">35 ℃</span></div><input type="range" id="thTemp" min="25" max="45" value="35"><br></div>
+            <div><div style="display:flex;justify-content:space-between"><span>湿度下限</span><span id="thHumV">40 %</span></div><input type="range" id="thHum" min="20" max="80" value="40"><br></div>
+            <div><div style="display:flex;justify-content:space-between"><span>pH 下限</span><span id="thPhV">5.0</span></div><input type="range" id="thPh" min="4" max="7" step="0.1" value="5"><br></div>
+            <div><div style="display:flex;justify-content:space-between"><span>病害置信度阈值</span><span id="thConfV">85 %</span></div><input type="range" id="thConf" min="50" max="99" value="85"></div>
+          </div>
+          <div class="banner" style="margin-top:16px">预警将通过 <b>移动设备推送</b> 与 <b>电子邮件</b> 及时送达农场管理者。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 喷洒方案 ============ -->
+    <section class="screen" id="screen-spray">
+      <div class="grid g-3">
+        <div class="card" style="border-color:var(--accent)">
+          <h3>方案 A <span class="st good">推荐</span></h3>
+          <p class="hint">LSTM 综合评分最高</p>
+          <div class="kv">
+            <dt>农药种类</dt><dd>三环唑 75% 可湿粉</dd>
+            <dt>用量</dt><dd>40 g/亩</dd>
+            <dt>喷洒时机</dt><dd>今日 17:00 前</dd>
+            <dt>预计防治率</dt><dd>92%</dd>
+            <dt>综合成本</dt><dd>¥6.8 / 亩</dd>
+          </div>
+        </div>
+        <div class="card">
+          <h3>方案 B</h3>
+          <p class="hint">成本更低、起效稍慢</p>
+          <div class="kv">
+            <dt>农药种类</dt><dd>稻瘟灵 40% 乳油</dd>
+            <dt>用量</dt><dd>80 ml/亩</dd>
+            <dt>喷洒时机</dt><dd>明日上午</dd>
+            <dt>预计防治率</dt><dd>84%</dd>
+            <dt>综合成本</dt><dd>¥5.2 / 亩</dd>
+          </div>
+        </div>
+        <div class="card">
+          <h3>方案 C</h3>
+          <p class="hint">绿色环保、生物防治</p>
+          <div class="kv">
+            <dt>农药种类</dt><dd>枯草芽孢杆菌生物制剂</dd>
+            <dt>用量</dt><dd>60 g/亩</dd>
+            <dt>喷洒时机</dt><dd>连续 3 日</dd>
+            <dt>预计防治率</dt><dd>78%</dd>
+            <dt>综合成本</dt><dd>¥9.5 / 亩</dd>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid g-21" style="margin-top:16px">
+        <div class="card">
+          <h3>三方案综合对比 <span class="tag">雷达图 · 分值越高越好</span></h3>
+          <div class="chart" id="spRadar" style="height:320px"></div>
+        </div>
+        <div class="card">
+          <h3>无人机执行进度</h3>
+          <p class="hint">当前任务：方案 A · 3 号试验田东区</p>
+          <div class="kv">
+            <dt>任务进度</dt><dd><div class="meter"><div class="fill" id="spProg" style="width:64%"></div></div></dd>
+            <dt>已喷洒面积</dt><dd id="spArea">20.5 / 32 亩</dd>
+            <dt>预计完成</dt><dd>17:24</dd>
+            <dt>实时反馈</dt><dd id="spFeedback">喷洒均匀度良好，已覆盖 3 处病斑区</dd>
+          </div>
+          <h3 style="margin-top:16px">执行日志</h3>
+          <div class="tbl-wrap"><table id="spLog">
+            <thead><tr><th>时间</th><th>事件</th></tr></thead>
+            <tbody>
+              <tr><td>09:45</td><td>无人机起飞，进入目标航线</td></tr>
+              <tr><td>09:52</td><td>完成东区 12 亩喷洒</td></tr>
+              <tr><td>10:01</td><td>补充药液，返回继续作业</td></tr>
+              <tr><td>10:08</td><td>覆盖第 3 处病斑区域</td></tr>
+            </tbody>
+          </table></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 预期效果 ============ -->
+    <section class="screen" id="screen-effect">
+      <div class="tiles">
+        <div class="tile"><div class="lab">农药使用量</div><div class="val" style="color:var(--good)">-20<span class="unit">%</span></div><span class="delta up">▼ 减少 20% 以上</span></div>
+        <div class="tile"><div class="lab">作物产量</div><div class="val" style="color:var(--good)">+7.5<span class="unit">%</span></div><span class="delta up">▲ 提升 5%–10%</span></div>
+        <div class="tile"><div class="lab">防治成本</div><div class="val" style="color:var(--good)">-15<span class="unit">%</span></div><span class="delta up">▼ 显著降低</span></div>
+        <div class="tile"><div class="lab">防治效率</div><div class="val" style="color:var(--good)">×3.2</div><span class="delta up">▲ 较人工巡查</span></div>
+      </div>
+
+      <div class="grid g-21" style="margin-top:16px">
+        <div class="card">
+          <h3>使用前后关键指标对比</h3>
+          <div class="chart" id="efChart" style="height:300px"></div>
+        </div>
+        <div class="card">
+          <h3>评估方法</h3>
+          <p class="hint">持续收集与分析数据，验证系统实际效果</p>
+          <div class="kv">
+            <dt>产量数据</dt><dd>定期收集并对比历史产量</dd>
+            <dt>健康指标</dt><dd>作物生长状态监测</dd>
+            <dt>环境记录</dt><dd>温度 / 湿度 / pH / 光谱</dd>
+            <dt>农药用量监控</dt><dd>确保资源优化确实实现</dd>
+            <dt>反馈调整</dt><dd>基于反馈优化系统配置与流程</dd>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+/* =====================================================================
+   “机”到病除 —— AI 病虫害诊断系统 · 前端演示
+   纯前端 mock 数据 + ECharts 图表（遵循 dataviz 规范：薄标记/细网格/
+   分类色固定顺序/状态色配图标文字/单坐标轴/顺序色单一色相）
+   ===================================================================== */
+(function(){
+  "use strict";
+
+  /* ---------- 调色板（浅色 / 深色，来自 dataviz 参考实例） ---------- */
+  var PALETTES = {
+    light: {
+      surface:"#fcfcfb", ink:"#0b0b0b", ink2:"#52514e", muted:"#898781",
+      grid:"#e1e0d9", axis:"#c3c2b7", border:"rgba(11,11,11,0.10)",
+      cat:["#2a78d6","#eb6834","#1baf7a","#eda100","#e87ba4","#008300","#4a3aa7","#e34948"],
+      seq:["#cde2fb","#9ec5f4","#6da7ec","#3987e5","#2a78d6","#1c5cab","#0d366b"]
+    },
+    dark: {
+      surface:"#1a1a19", ink:"#ffffff", ink2:"#c3c2b7", muted:"#898781",
+      grid:"#2c2c2a", axis:"#383835", border:"rgba(255,255,255,0.10)",
+      cat:["#3987e5","#d95926","#199e70","#c98500","#d55181","#008300","#9085e9","#e66767"],
+      seq:["#184f95","#256abf","#3987e5","#6da7ec","#86b6ef","#b7d3f6","#cde2fb"]
+    }
+  };
+  var STATUS = { good:"#0ca30c", warning:"#fab219", serious:"#ec835a", critical:"#d03b3b" };
+  var theme = "light";
+  function P(){ return PALETTES[theme]; }
+
+  /* 内联 SVG 图标 */
+  function icon(name, size){
+    return '<svg class="ico" viewBox="0 0 24 24" width="'+size+'" height="'+size+'"><use href="#i-'+name+'"/></svg>';
+  }
+  var MOON_SVG = icon("moon", 17);
+  var SUN_SVG = icon("sun", 17);
+
+  /* ---------- 工具函数 ---------- */
+  function hexRgba(hex, a){
+    var h = hex.replace("#","");
+    if(h.length===3) h = h.split("").map(function(c){return c+c;}).join("");
+    var r = parseInt(h.substr(0,2),16), g = parseInt(h.substr(2,2),16), b = parseInt(h.substr(4,2),16);
+    return "rgba("+r+","+g+","+b+","+a+")";
+  }
+  function fmt(n){ return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
+
+  var charts = {};
+  function chart(id, option){
+    var el = document.getElementById(id);
+    if(!el) return null;
+    var c = charts[id] || echarts.init(el);
+    charts[id] = c;
+    c.setOption(option, true);
+    return c;
+  }
+  function axisX(p){ return { type:"category", boundaryGap:true, axisLine:{lineStyle:{color:p.axis}}, axisTick:{show:false}, axisLabel:{color:p.muted,fontSize:11}, splitLine:{show:false} }; }
+  function axisY(p){ return { type:"value", axisLine:{show:false}, axisTick:{show:false}, axisLabel:{color:p.muted,fontSize:11}, splitLine:{lineStyle:{color:p.grid,width:1}} }; }
+  function tip(p){ return { backgroundColor:p.surface, borderColor:p.axis, borderWidth:1, textStyle:{color:p.ink,fontSize:12}, padding:[8,12] }; }
+  function legend(p){ return { textStyle:{color:p.ink2,fontSize:11}, icon:"roundRect", itemWidth:10, itemHeight:10, itemGap:16 }; }
+  function lineSeries(p, name, data, color, area){
+    var s = {
+      name:name, type:"line", data:data, smooth:0.25, symbol:"circle", symbolSize:5,
+      showSymbol:false, lineStyle:{width:2,color:color},
+      itemStyle:{color:color, borderColor:p.surface, borderWidth:2},
+      emphasis:{focus:"series"}
+    };
+    if(area) s.areaStyle = { color: hexRgba(color, 0.10) };
+    return s;
+  }
+  function barSeries(p, name, data, color){
+    return { name:name, type:"bar", data:data, barMaxWidth:22,
+      itemStyle:{color:color, borderRadius:[4,4,0,0]},
+      label:{show:true, position:"top", color:p.ink2, fontSize:11, fontWeight:"600"},
+      emphasis:{focus:"series"} };
+  }
+  function spark(id, data, color){
+    var el = document.getElementById(id); if(!el) return;
+    var c = charts[id] || echarts.init(el); charts[id]=c;
+    c.setOption({
+      grid:{left:1,right:1,top:2,bottom:1},
+      xAxis:{type:"category",show:false,boundaryGap:false},
+      yAxis:{type:"value",show:false,min:"dataMin"},
+      series:[{type:"line",data:data,smooth:true,symbol:"none",lineStyle:{width:1.5,color:color},
+               areaStyle:{color:hexRgba(color,0.12)}}]
+    }, true);
+  }
+
+  /* ---------- 导航切换 ---------- */
+  var SCREENS = ["overview","monitor","identify","visualize","alert","spray","effect"];
+  var TITLES = {
+    overview:["系统概览","Overview"], monitor:["实时监测","Real-time Monitoring"],
+    identify:["病虫害识别","Pest & Disease Identification"],
+    visualize:["数据可视化","Data Visualization"], alert:["预警系统","Warning System"],
+    spray:["喷洒方案与执行","Spraying Plan & Execution"], effect:["预期效果与评估","Expected Effects"]
+  };
+  var renderers = {}; var current = "overview";
+
+  function switchScreen(id){
+    current = id;
+    document.querySelectorAll(".nav-item").forEach(function(b){
+      b.classList.toggle("active", b.getAttribute("data-screen")===id);
+    });
+    SCREENS.forEach(function(s){
+      document.getElementById("screen-"+s).classList.toggle("active", s===id);
+    });
+    document.getElementById("pageTitle").textContent = TITLES[id][0];
+    document.getElementById("pageSub").textContent = TITLES[id][1];
+    if(renderers[id]) renderers[id]();
+    Object.keys(charts).forEach(function(k){
+      var c = charts[k];
+      if(c && c.getDom().offsetParent !== null) c.resize();
+    });
+  }
+  document.querySelectorAll(".nav-item").forEach(function(b){
+    b.addEventListener("click", function(){ switchScreen(b.getAttribute("data-screen")); });
+  });
+
+  /* =====================================================================
+     模拟数据
+     ===================================================================== */
+  var sim = { temp:26.4, hum:62, ph:6.3, light:38.0, bat:76, alt:12.4, spd:4.2,
+              tempH:[], humH:[], phH:[], lightH:[] };
+  function drift(v, d){ return Math.max(0, +(v + (Math.random()-0.5)*d).toFixed(1)); }
+  function seedHistory(){
+    var t=26.4,h=62,p=6.3,l=38.0;
+    for(var i=0;i<30;i++){ t=drift(t,1.4); h=drift(h,3); p=drift(p,0.2); l=drift(l,2);
+      sim.tempH.push(+t.toFixed(1)); sim.humH.push(+h.toFixed(1)); sim.phH.push(+p.toFixed(2)); sim.lightH.push(+l.toFixed(1)); }
+    sim.temp=+t.toFixed(1); sim.hum=+h.toFixed(1); sim.ph=+p.toFixed(2); sim.light=+l.toFixed(1);
+  }
+
+  var warnSeed = [
+    ["W-2041","稻瘟病爆发风险","critical","3 号田 · 东区","09:42","undone"],
+    ["W-2040","草地贪夜蛾为害","critical","3 号田 · 南区","09:31","undone"],
+    ["W-2039","稻瘟病局部加重","critical","1 号田 · 北区","09:18","undone"],
+    ["W-2038","稻曲病扩散","serious","2 号田 · 西区","09:05","undone"],
+    ["W-2037","土壤 pH 偏低","serious","3 号田 · 东区","08:52","undone"],
+    ["W-2036","湿度超阈值","serious","4 号田 · 全域","08:40","undone"],
+    ["W-2035","白叶枯病初现","serious","2 号田 · 南区","08:26","undone"],
+    ["W-2034","温度接近上限","serious","3 号田 · 全域","08:12","done"],
+    ["W-2033","光谱异常提示","warning","1 号田 · 西区","07:58","done"],
+    ["W-2032","pH 轻微波动","warning","4 号田 · 东区","07:44","done"],
+    ["W-2031","湿度偏低提示","warning","2 号田 · 北区","07:30","done"]
+  ];
+  var warnings = warnSeed.map(function(w){
+    return { id:w[0], type:w[1], level:w[2], area:w[3], time:w[4], status:w[5] };
+  });
+  var LEVEL_LABEL = { critical:"严重", serious:"较重", warning:"一般" };
+  var nextWarnId = 2042;
+
+  var samples = [
+    { name:"稻瘟病", conf:96.2, sev:"critical", sevLabel:"严重", area:"叶片中部 · 3 处病斑", ratio:"18.6%", advice:"立即喷洒三环唑，用量 40g/亩", spots:[
+      [0.30,0.42,0.16],[0.44,0.50,0.14],[0.52,0.40,0.12],[0.38,0.60,0.12],[0.60,0.58,0.10],[0.70,0.34,0.12],[0.24,0.55,0.10],[0.65,0.66,0.10],[0.48,0.72,0.10],[0.82,0.48,0.09],[0.34,0.30,0.09],[0.56,0.26,0.09]
+    ], box:[0.20,0.24,0.70,0.52] },
+    { name:"稻曲病", conf:91.8, sev:"serious", sevLabel:"较重", area:"穗部 · 2 处病斑", ratio:"11.2%", advice:"喷洒稻瘟灵，用量 80ml/亩", spots:[
+      [0.40,0.30,0.11],[0.55,0.28,0.10],[0.48,0.38,0.09],[0.62,0.34,0.09],[0.35,0.40,0.08],[0.70,0.42,0.08],[0.44,0.48,0.07],[0.58,0.46,0.07]
+    ], box:[0.30,0.22,0.46,0.34] },
+    { name:"白叶枯病", conf:88.7, sev:"warning", sevLabel:"一般", area:"叶缘 · 1 处病斑", ratio:"6.4%", advice:"加强通风，观察 2 日后复检", spots:[
+      [0.34,0.52,0.12],[0.46,0.56,0.10],[0.40,0.62,0.09],[0.52,0.66,0.08],[0.44,0.72,0.07],[0.58,0.58,0.07]
+    ], box:[0.28,0.46,0.38,0.34] },
+    { name:"草地贪夜蛾为害", conf:93.4, sev:"critical", sevLabel:"严重", area:"叶片多处咬痕", ratio:"22.3%", advice:"喷洒甲维盐，用量 30g/亩", spots:[
+      [0.28,0.34,0.10],[0.42,0.30,0.09],[0.50,0.44,0.10],[0.60,0.36,0.09],[0.70,0.52,0.09],[0.34,0.60,0.08],[0.48,0.66,0.08],[0.78,0.40,0.08],[0.62,0.62,0.07],[0.40,0.46,0.06]
+    ], box:[0.22,0.24,0.64,0.50] }
+  ];
+  var curSample = 0;
+
+  /* =====================================================================
+     病虫害识别 —— 叶片绘制（SVG）
+     ===================================================================== */
+  function drawLeaf(){
+    var s = samples[curSample];
+    var spots = s.spots.map(function(sp){
+      var x = 60 + sp[0]*320, y = 60 + sp[1]*360, r = 26*sp[2]+6;
+      return '<circle cx="'+x.toFixed(0)+'" cy="'+y.toFixed(0)+'" r="'+r.toFixed(0)+'" fill="#8a5a2b" opacity="0.55"/>'+
+             '<circle cx="'+x.toFixed(0)+'" cy="'+y.toFixed(0)+'" r="'+(r*0.5).toFixed(0)+'" fill="#6b4226" opacity="0.75"/>';
+    }).join("");
+    var bx = 60 + s.box[0]*320, by = 60 + s.box[1]*360, bw = s.box[2]*320, bh = s.box[3]*360;
+    var box = '<rect x="'+bx.toFixed(0)+'" y="'+by.toFixed(0)+'" width="'+bw.toFixed(0)+'" height="'+bh.toFixed(0)+'" fill="none" stroke="#d03b3b" stroke-width="2.5" stroke-dasharray="7 5" rx="6"/>'+
+              '<rect x="'+bx.toFixed(0)+'" y="'+(by-26).toFixed(0)+'" width="'+(bw).toFixed(0)+'" height="24" rx="6" fill="#d03b3b"/>'+
+              '<text x="'+(bx+bw/2).toFixed(0)+'" y="'+(by-9).toFixed(0)+'" text-anchor="middle" fill="#fff" font-size="13" font-weight="600">'+s.name+'</text>';
+    var svg = '<svg viewBox="0 0 500 480" preserveAspectRatio="xMidYMid meet">'+
+      '<defs><linearGradient id="leafG" x1="0" y1="0" x2="1" y2="1">'+
+      '<stop offset="0" stop-color="#4e9a4a"/><stop offset="1" stop-color="#2f6b34"/></linearGradient></defs>'+
+      '<path d="M250 30 C200 120 190 260 205 380 C240 450 320 450 355 380 C370 260 360 120 310 30 C290 20 270 20 250 30 Z" fill="url(#leafG)"/>'+
+      '<path d="M250 30 C248 150 248 300 250 450" fill="none" stroke="#2a5a2f" stroke-width="3" opacity="0.55"/>'+
+      spots + box +
+      '<text x="20" y="30" font-size="12" fill="#52514e">样本 #'+(curSample+1)+' · 200万像素</text>'+
+      '</svg>';
+    document.getElementById("leafStage").innerHTML = svg;
+    // 缩略图
+    var th = samples.map(function(sp,i){
+      return '<div class="thumb'+(i===curSample?" on":"")+'" data-i="'+i+'"><div class="t-n">'+sp.name+'</div><div class="t-c">'+sp.conf.toFixed(1)+'%</div></div>';
+    }).join("");
+    document.getElementById("thumbs").innerHTML = th;
+  }
+  function applyResult(){
+    var s = samples[curSample];
+    document.getElementById("resName").textContent = s.name;
+    document.getElementById("resConf").textContent = s.conf.toFixed(1)+"%";
+    document.getElementById("resConfBar").style.width = s.conf.toFixed(1)+"%";
+    document.getElementById("resConfBar").className = "fill"+(s.conf>90?" high":"");
+    document.getElementById("resSev").innerHTML = '<span class="st '+s.sev+'">'+s.sevLabel+"</span>";
+    document.getElementById("resArea").textContent = s.area;
+    document.getElementById("resRatio").textContent = s.ratio;
+    document.getElementById("resAdvice").textContent = s.advice;
+  }
+
+  /* =====================================================================
+     各屏渲染函数
+     ===================================================================== */
+  /* ---- 概览 ---- */
+  renderers.overview = function(){
+    var p = P();
+    spark("spkRecog", [820,940,1100,1020,1180,1240,1180,1200,1220,1240,1260,1286], p.cat[0]);
+    spark("spkWarn", [38,34,36,30,32,28,30,27,26,25,24,23], p.cat[7]);
+    spark("spkArea", [180,200,220,240,260,270,280,290,300,305,310,320], p.cat[2]);
+    spark("spkPest", [100,95,90,88,85,84,83,82,81,80,80,80], p.cat[2]);
+
+    chart("ovPie", {
+      tooltip:tip(p), color:p.cat,
+      graphic:[
+        {type:"text", left:"center", top:"35%", style:{text:"5 类", fill:p.ink, fontSize:26, fontWeight:"700", textAlign:"center"}},
+        {type:"text", left:"center", top:"48%", style:{text:"主要病害", fill:p.muted, fontSize:11, textAlign:"center"}}
+      ],
+      series:[{ type:"pie", radius:["50%","72%"], center:["50%","44%"],
+        itemStyle:{borderColor:p.surface, borderWidth:2},
+        label:{show:true, formatter:"{b}\n{d}%", color:p.ink2, fontSize:11, lineHeight:16},
+        labelLine:{show:true, length:12, length2:8, lineStyle:{color:p.axis}},
+        emphasis:{label:{color:p.ink, fontWeight:"700"}},
+        data:[
+          {name:"稻瘟病",value:42},{name:"稻曲病",value:26},{name:"白叶枯病",value:15},
+          {name:"草地贪夜蛾",value:11},{name:"其他",value:6}
+        ]}]
+    });
+
+    chart("ovTrend", {
+      tooltip:Object.assign(tip(p),{trigger:"axis"}), grid:{left:44,right:20,top:20,bottom:30},
+      xAxis:Object.assign(axisX(p),{data:["周一","周二","周三","周四","周五","周六","周日"]}),
+      yAxis:axisY(p),
+      series:[ Object.assign(
+        lineSeries(p,"预警次数", [18,22,20,26,24,30,23], p.cat[0], true),
+        { markPoint:{ symbolSize:38, label:{color:p.ink2, fontSize:10, formatter:"峰值 {c}"},
+            itemStyle:{color:p.cat[0], borderColor:p.surface, borderWidth:2},
+            data:[{type:"max", name:"峰值"}] } } ) ]
+    });
+  };
+
+  /* ---- 实时监测 ---- */
+  renderers.monitor = function(){
+    var p = P();
+    spark("spkTemp", sim.tempH, p.cat[0]);
+    spark("spkHum", sim.humH, p.cat[1]);
+    spark("spkPh", sim.phH, p.cat[2]);
+    spark("spkLight", sim.lightH, p.cat[3]);
+    chart("mChartTemp", {
+      tooltip:Object.assign(tip(p),{trigger:"axis"}), grid:{left:44,right:16,top:20,bottom:28},
+      xAxis:Object.assign(axisX(p),{boundaryGap:false,data:sim.tempH.map(function(_,i){return i+1;})}),
+      yAxis:axisY(p),
+      series:[ lineSeries(p,"温度 (℃)", sim.tempH, p.cat[0], true) ]
+    });
+    chart("mChartHum", {
+      tooltip:Object.assign(tip(p),{trigger:"axis"}), grid:{left:44,right:16,top:20,bottom:28},
+      xAxis:Object.assign(axisX(p),{boundaryGap:false,data:sim.humH.map(function(_,i){return i+1;})}),
+      yAxis:axisY(p),
+      series:[ lineSeries(p,"湿度 (%)", sim.humH, p.cat[1], true) ]
+    });
+  };
+
+  /* ---- 病虫害识别 ---- */
+  renderers.identify = function(){
+    var p = P();
+    chart("idChart", {
+      tooltip:tip(p), grid:{left:90,right:30,top:10,bottom:30},
+      xAxis:{ type:"value", axisLine:{show:false}, axisTick:{show:false}, axisLabel:{color:p.muted,fontSize:11}, splitLine:{lineStyle:{color:p.grid,width:1}} },
+      yAxis:{ type:"category", data:["草地贪夜蛾","白叶枯病","稻曲病","稻瘟病"], axisLine:{lineStyle:{color:p.axis}}, axisTick:{show:false}, axisLabel:{color:p.muted,fontSize:11} },
+      series:[{ type:"bar", data:[138,86,164,287], barMaxWidth:16,
+        itemStyle:{color:p.cat[0], borderRadius:[0,4,4,0]}, label:{show:true,position:"right",color:p.ink2,fontSize:11} }]
+    });
+  };
+
+  /* ---- 数据可视化 ---- */
+  renderers.visualize = function(){
+    var p = P();
+    var days = []; for(var i=1;i<=30;i++) days.push(i+"日");
+    chart("vzTrend", {
+      tooltip:Object.assign(tip(p),{trigger:"axis"}),
+      legend:legend(p), grid:{left:44,right:20,top:38,bottom:30},
+      xAxis:Object.assign(axisX(p),{boundaryGap:false,data:days}),
+      yAxis:axisY(p),
+      series:[
+        lineSeries(p,"稻瘟病", [3,4,4,5,6,5,7,8,9,10,9,8,9,10,11,12,13,12,14,15,16,15,14,13,12,11,10,9,8,7], p.cat[0]),
+        lineSeries(p,"稻曲病", [2,2,3,3,4,4,5,5,6,5,6,6,7,7,8,8,7,8,9,8,9,8,7,7,6,6,5,5,4,4], p.cat[1]),
+        lineSeries(p,"白叶枯病", [1,1,2,2,2,3,3,4,4,5,4,5,5,6,5,5,6,5,5,4,5,4,4,3,3,3,2,2,2,2], p.cat[2])
+      ]
+    });
+    chart("vzBar", {
+      tooltip:Object.assign(tip(p),{trigger:"axis"}), legend:legend(p),
+      grid:{left:44,right:20,top:38,bottom:30},
+      xAxis:Object.assign(axisX(p),{data:["杀虫剂","杀菌剂","除草剂"]}),
+      yAxis:axisY(p),
+      series:[
+        barSeries(p,"使用前", [2.4, 1.8, 1.2], p.cat[0]),
+        barSeries(p,"使用后", [1.7, 1.3, 0.9], p.cat[1])
+      ]
+    });
+    renderFieldMap();
+  };
+
+  function renderFieldMap(){
+    var p = P();
+    var cells = "";
+    var sev = [0,1,2,2,1,0,3,4,2,3,4,5,3,2,1,0,2,3,3,2,1,0,1,2,4,5,4,3,2,1,0,0,1,2,3,3,2,1,0,1,2,3,4,3,2,1,0,1];
+    var SEV_CN = ["正常","轻微","轻度","中度","重度","严重"];
+    for(var i=0;i<48;i++){
+      var v = sev[i];
+      var col = p.seq[Math.min(v, p.seq.length-1)];
+      var label = (Math.floor(i/8)+1)+"排"+(i%8+1)+"号";
+      cells += '<div class="plot" style="background:'+col+'" title="'+label+' · '+SEV_CN[v]+'">'+(v>=3?label:"")+"</div>";
+    }
+    document.getElementById("fieldMap").innerHTML = cells;
+    var ramp = document.querySelector(".legend-ramp .ramp");
+    if(ramp) ramp.style.background = "linear-gradient(90deg,"+p.seq[0]+","+p.seq[Math.floor(p.seq.length/2)]+","+p.seq[p.seq.length-1]+")";
+  }
+
+  /* ---- 预警系统 ---- */
+  function warnRow(w){
+    var lv = LEVEL_LABEL[w.level] || w.level;
+    var st = w.status==="done" ? '<span class="st good">已处理</span>' : '<span class="st warning">未处理</span>';
+    return '<tr>'+
+      '<td class="mono">'+w.id+'</td>'+
+      '<td>'+w.type+'</td>'+
+      '<td><span class="st '+w.level+'">'+lv+'</span></td>'+
+      '<td>'+w.area+'</td>'+
+      '<td class="mono">'+w.time+'</td>'+
+      '<td>'+st+'</td>'+
+      '<td><button class="btn" style="padding:4px 10px;font-size:12px" data-wid="'+w.id+'">'+(w.status==="done"?"查看":"处理")+'</button></td>'+
+      '</tr>';
+  }
+  function renderWarns(filter){
+    var rows = warnings.filter(function(w){
+      if(filter==="all") return true;
+      if(filter==="undone") return w.status==="undone";
+      return w.level===filter;
+    });
+    document.getElementById("warnTable").querySelector("tbody").innerHTML =
+      rows.length ? rows.map(warnRow).join("") : '<tr><td colspan="7" style="text-align:center;color:var(--muted)">暂无匹配预警</td></tr>';
+  }
+  function updateWarnCounts(){
+    function c(level){ return warnings.filter(function(w){return w.level===level&&w.status==="undone";}).length; }
+    document.getElementById("alCritical").textContent = c("critical");
+    document.getElementById("alSerious").textContent = c("serious");
+    document.getElementById("alWarning").textContent = c("warning");
+    document.getElementById("alDone").textContent = warnings.filter(function(w){return w.status==="done";}).length;
+  }
+  renderers.alert = function(){
+    renderWarns(activeFilter);
+    updateWarnCounts();
+  };
+  var activeFilter = "all";
+  document.querySelectorAll("[data-filter]").forEach(function(ch){
+    ch.addEventListener("click", function(){
+      activeFilter = ch.getAttribute("data-filter");
+      document.querySelectorAll("[data-filter]").forEach(function(x){x.classList.toggle("on", x===ch);});
+      renderWarns(activeFilter);
+    });
+  });
+
+  /* ---- 喷洒方案 ---- */
+  renderers.spray = function(){
+    var p = P();
+    chart("spRadar", {
+      tooltip:tip(p), legend:Object.assign(legend(p),{bottom:0,left:"center"}),
+      radar:{
+        indicator:[
+          {name:"防治效果",max:100},{name:"成本效益",max:100},{name:"时效性",max:100},
+          {name:"环保性",max:100},{name:"易执行",max:100}
+        ],
+        radius:"62%",
+        axisName:{color:p.ink2,fontSize:12},
+        splitLine:{lineStyle:{color:p.grid}},
+        splitArea:{areaStyle:{color:[p.surface, hexRgba(p.grid,0.4)]}},
+        axisLine:{lineStyle:{color:p.grid}}
+      },
+      series:[{
+        type:"radar",
+        data:[
+          { name:"方案 A", value:[92,80,90,72,88], itemStyle:{color:p.cat[0]}, areaStyle:{color:hexRgba(p.cat[0],0.12)}, lineStyle:{width:2,color:p.cat[0]} },
+          { name:"方案 B", value:[84,92,70,66,80], itemStyle:{color:p.cat[1]}, areaStyle:{color:hexRgba(p.cat[1],0.12)}, lineStyle:{width:2,color:p.cat[1]} },
+          { name:"方案 C", value:[78,58,60,96,70], itemStyle:{color:p.cat[2]}, areaStyle:{color:hexRgba(p.cat[2],0.12)}, lineStyle:{width:2,color:p.cat[2]} }
+        ],
+        symbol:"circle", symbolSize:5
+      }]
+    });
+  };
+
+  /* ---- 预期效果 ---- */
+  renderers.effect = function(){
+    var p = P();
+    chart("efChart", {
+      tooltip:Object.assign(tip(p),{trigger:"axis"}), legend:legend(p),
+      grid:{left:54,right:20,top:38,bottom:30},
+      xAxis:Object.assign(axisX(p),{data:["农药用量 (L/亩)","防治成本 (元/亩)","产量 (kg/亩)"]}),
+      yAxis:axisY(p),
+      series:[
+        barSeries(p,"使用前", [2.2, 42, 560], p.cat[0]),
+        barSeries(p,"使用后", [1.6, 31, 602], p.cat[1])
+      ]
+    });
+  };
+
+
+  /* =====================================================================
+     实时更新
+     ===================================================================== */
+  function tick(){
+    // 时钟
+    var d = new Date();
+    var hh = ("0"+d.getHours()).slice(-2), mm = ("0"+d.getMinutes()).slice(-2), ss = ("0"+d.getSeconds()).slice(-2);
+    document.getElementById("clock").textContent = hh+":"+mm+":"+ss;
+
+    // 传感器漂移
+    sim.temp = drift(sim.temp, 0.8); sim.hum = drift(sim.hum, 2); sim.ph = drift(sim.ph, 0.15); sim.light = drift(sim.light, 1.5);
+    sim.tempH.push(+sim.temp.toFixed(1)); sim.humH.push(+sim.hum.toFixed(1)); sim.phH.push(+sim.ph.toFixed(2)); sim.lightH.push(+sim.light.toFixed(1));
+    if(sim.tempH.length>30){ sim.tempH.shift(); sim.humH.shift(); sim.phH.shift(); sim.lightH.shift(); }
+
+    if(current==="monitor"){
+      document.getElementById("mTemp").innerHTML = sim.temp.toFixed(1)+'<span class="unit">℃</span>';
+      document.getElementById("mHum").innerHTML = sim.hum.toFixed(1)+'<span class="unit">%</span>';
+      document.getElementById("mPh").innerHTML = sim.ph.toFixed(2);
+      document.getElementById("mLight").innerHTML = sim.light.toFixed(1)+'<span class="unit">kLx</span>';
+      var p = P();
+      spark("spkTemp", sim.tempH, p.cat[0]); spark("spkHum", sim.humH, p.cat[1]);
+      spark("spkPh", sim.phH, p.cat[2]); spark("spkLight", sim.lightH, p.cat[3]);
+      if(charts["mChartTemp"]) charts["mChartTemp"].setOption({series:[{data:sim.tempH}]});
+      if(charts["mChartHum"]) charts["mChartHum"].setOption({series:[{data:sim.humH}]});
+      // 数据流表
+      var cells = [hh+":"+mm+":"+ss, sim.temp.toFixed(1)+"℃", sim.hum.toFixed(1)+"%", sim.ph.toFixed(2), sim.light.toFixed(1)+"kLx"]
+        .map(function(x){ return '<td class="mono">'+x+'</td>'; }).join("");
+      var tb = document.getElementById("streamTable").querySelector("tbody");
+      tb.insertAdjacentHTML("afterbegin", "<tr>"+cells+"</tr>");
+      while(tb.children.length>8) tb.removeChild(tb.lastChild);
+      // 无人机状态
+      sim.bat = Math.max(20, sim.bat - 0.05);
+      sim.alt = drift(sim.alt, 0.6); sim.spd = drift(sim.spd, 0.3);
+      document.getElementById("dAlt").textContent = sim.alt.toFixed(1)+" m";
+      document.getElementById("dSpd").textContent = sim.spd.toFixed(1)+" m/s";
+      document.getElementById("dBat").style.width = sim.bat.toFixed(0)+"%";
+    }
+    // 喷洒进度：全局推进，保证离开监测页也持续走动
+    var spProgEl = document.getElementById("spProg");
+    if(spProgEl){
+      var prog = Math.min(100, parseFloat(spProgEl.style.width)+0.35);
+      spProgEl.style.width = prog+"%";
+      document.getElementById("spArea").textContent = Math.min(32, 20.5 + prog*0.115).toFixed(1)+" / 32 亩";
+    }
+  }
+
+  /* 偶发新预警 */
+  function maybeWarn(){
+    if(Math.random() < 0.35){
+      var levels = ["critical","serious","warning"];
+      var lv = levels[Math.floor(Math.random()*levels.length)];
+      var types = { critical:"稻瘟病爆发风险", serious:"湿度超阈值", warning:"pH 轻微波动" };
+      var d = new Date(); var t = ("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2);
+      warnings.unshift({ id:"W-"+(nextWarnId++), type:types[lv], level:lv,
+        area:(1+Math.floor(Math.random()*4))+" 号田 · "+(Math.random()<0.5?"东区":"西区"), time:t, status:"undone" });
+      if(warnings.length>20) warnings.pop();
+      if(current==="alert"){ renderWarns(activeFilter); updateWarnCounts(); }
+    }
+  }
+
+  /* =====================================================================
+     主题切换
+     ===================================================================== */
+  var themeBtn = document.getElementById("themeBtn");
+  themeBtn.innerHTML = MOON_SVG;
+  themeBtn.addEventListener("click", function(){
+    theme = theme==="light" ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", theme);
+    themeBtn.innerHTML = theme==="light" ? MOON_SVG : SUN_SVG;
+    if(renderers[current]) renderers[current]();
+  });
+
+  /* =====================================================================
+     事件绑定 & 启动
+     ===================================================================== */
+  document.getElementById("btnDetect").addEventListener("click", applyResult);
+  document.getElementById("btnCycle").addEventListener("click", function(){
+    curSample = (curSample+1)%samples.length; drawLeaf(); applyResult();
+  });
+  document.getElementById("thumbs").addEventListener("click", function(e){
+    var t = e.target.closest(".thumb"); if(!t) return;
+    curSample = +t.getAttribute("data-i"); drawLeaf(); applyResult();
+  });
+  document.getElementById("warnTable").addEventListener("click", function(e){
+    var b = e.target.closest("[data-wid]"); if(!b) return;
+    var w = warnings.find(function(x){return x.id===b.getAttribute("data-wid");});
+    if(w && w.status==="undone"){ w.status="done"; renderWarns(activeFilter); updateWarnCounts(); }
+  });
+  // 阈值滑块显示
+  [["thTemp","thTempV"," ℃"],["thHum","thHumV"," %"],["thPh","thPhV",""],["thConf","thConfV"," %"]].forEach(function(a){
+    var el = document.getElementById(a[0]);
+    el.addEventListener("input", function(){ document.getElementById(a[1]).textContent = el.value + a[2]; });
+  });
+
+  window.addEventListener("resize", function(){
+    Object.keys(charts).forEach(function(k){ if(charts[k]) charts[k].resize(); });
+  });
+
+  /* ---- 初始化 ---- */
+  if(typeof echarts === "undefined"){
+    var b = document.createElement("div");
+    b.className = "banner"; b.style.position="fixed"; b.style.top="60px"; b.style.left="50%";
+    b.style.transform="translateX(-50%)"; b.style.zIndex="999";
+    b.textContent = "ECharts 图表库加载失败，请联网后刷新页面（其余界面仍可浏览）。";
+    document.body.appendChild(b);
+  }
+
+  seedHistory();
+  drawLeaf();
+  applyResult();
+  renderFieldMap();
+  switchScreen("overview");
+  setInterval(tick, 2000);
+  setInterval(maybeWarn, 7000);
+  setInterval(function(){
+    var d = new Date(); var hh=("0"+d.getHours()).slice(-2), mm=("0"+d.getMinutes()).slice(-2);
+    document.getElementById("clock").textContent = hh+":"+mm+":"+("0"+d.getSeconds()).slice(-2);
+  }, 1000);
+})();
+</script>
+</body>
+</html>

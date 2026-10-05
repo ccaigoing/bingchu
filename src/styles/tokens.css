@@ -1,0 +1,60 @@
+/* ═══════════════════════════════════════════════════════════
+   设计令牌 —— 从 legacy/index.html 的 <style> 原样迁移
+   ═══════════════════════════════════════════════════════════
+
+   这是「视觉 1:1 保真」的基准，**值一个都不要改**。
+   主题切换靠 documentElement 上的 data-theme 属性（与旧版行为一致），
+   亮色是 :root 默认，暗色由 [data-theme="dark"] 覆盖。
+
+   注意：这些是 CSS 变量，只能被 CSS 消费。图表用的调色板在
+   src/components/charts/chartTheme.ts —— 那是 JS 对象，主题切换必须
+   重建 option，改 CSS 变量对已初始化的 ECharts 实例没有任何影响。
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --card: #ffffff;
+  --ink: #0b0b0b;
+  --ink2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.1);
+  --wash: rgba(11, 11, 11, 0.04);
+  --shadow: 0 1px 2px rgba(11, 11, 11, 0.04), 0 6px 20px rgba(11, 11, 11, 0.06);
+  --shadow-lg: 0 2px 6px rgba(11, 11, 11, 0.05), 0 14px 36px rgba(11, 11, 11, 0.1);
+  --stage-top: #eef7f0;
+
+  --brand: #14532d;
+  --brand2: #166534;
+  --accent: #2f9e6b;
+  --accent-soft: rgba(47, 158, 107, 0.14);
+
+  --good: #0ca30c;
+  --warning: #fab219;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+
+  --sidebar: #0e2b1c;
+  --sidebar-2: #0a2015;
+  --sidebar-ink: #d7e7dc;
+  --sidebar-muted: #87a393;
+  --sidebar-active: #16a34a;
+}
+
+[data-theme='dark'] {
+  --page: #0d0d0d;
+  --surface: #1a1a19;
+  --card: #1a1a19;
+  --ink: #ffffff;
+  --ink2: #c3c2b7;
+  --muted: #898781;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --border: rgba(255, 255, 255, 0.1);
+  --wash: rgba(255, 255, 255, 0.05);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 2px 8px rgba(0, 0, 0, 0.5), 0 16px 40px rgba(0, 0, 0, 0.6);
+  --stage-top: #14201a;
+}
