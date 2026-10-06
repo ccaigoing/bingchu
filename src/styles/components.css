@@ -818,3 +818,73 @@ input[type='range'] {
 .muted {
   color: var(--muted);
 }
+
+/* ═══════════════════════════════════════════════════════════
+   识别舞台 —— 2.4 新增，原 demo 没有这几条
+   ═══════════════════════════════════════════════════════════
+   原版这里画的是 SVG 假叶片（`.stage svg`），换成后端画好框的实拍图后
+   需要：图片铺满、空态居中、以及叠在图上的可交互框。
+
+   框**静止时不描边** —— 图上的框是后端已经画好的，再叠一层同样颜色的
+   边框就成了双重描边。静止时它只是个透明的命中区，hover 才显形。
+   ═══════════════════════════════════════════════════════════ */
+
+.stage img.shot {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.stage .placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 28px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+/* 覆盖 `.stage svg{width:100%}` —— 那条是给满幅叶片图用的，
+   用在 24px 的图标上会把它拉成整行宽。 */
+.stage .placeholder svg {
+  width: 26px;
+  height: 26px;
+}
+
+.detbox {
+  position: absolute;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  cursor: crosshair;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.detbox:hover,
+.detbox:focus-visible {
+  border-color: var(--critical);
+  background: rgba(208, 59, 59, 0.14);
+  outline: none;
+}
+.detbox .detbox-lab {
+  display: none;
+  position: absolute;
+  left: -2px;
+  top: -24px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: var(--critical);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.detbox:hover .detbox-lab,
+.detbox:focus-visible .detbox-lab {
+  display: block;
+}

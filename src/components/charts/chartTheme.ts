@@ -69,8 +69,8 @@ export type StatusKey = keyof typeof STATUS
  *
  * ECharts 的 `EChartsOption` 是巨型联合类型，逐字段拼装时有大量
  * 可选字段与 `undefined` 冲突，严格类型反而处处报错、逼人写 `any`。
- * 这里统一用松散片段，最终在 page 层用 `as EChartsOption` 收口
- * —— 全项目仅此一处断言，且写明了理由。
+ * 所以各屏直接拼 Fragment，**断言收口在 hooks/useECharts.ts 一处**
+ * —— 7 个页面各写一个 `as EChartsOption` 是没有意义的重复。
  */
 export type Fragment = Record<string, unknown>
 
