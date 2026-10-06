@@ -1,0 +1,33 @@
+# 后端运行期依赖。版本锁定为**本机实测通过**的那一组（见 server/app/config.py
+# 与 models/README.md 里的实测记录），不是随手写的最新版。
+#
+# ⚠️ 顶部这行 --extra-index-url 是必须的，别删：
+#    Linux 上 `pip install torch==2.6.0` 会从 PyPI 拉到 **CUDA 版**，连带
+#    nvidia-* 一堆轮子（约 2.5GB）。我们的部署目标是**纯 CPU 的云服务器**，
+#    这些包一个都用不上，还要占满磁盘、拖长部署时间。
+#    加上 CPU 源之后，下面 `torch==2.6.0+cpu` 这个带 `+cpu` 的本地版本号
+#    只可能从 PyTorch 官方 CPU 源解析到 —— PyPI 上根本没有这个版本。
+#    **用版本号本身把路堵死**，比靠调用方记得先装 torch 更可靠。
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+# ── 推理栈 ──
+torch==2.6.0+cpu
+torchvision==0.21.0+cpu
+ultralytics==8.4.173
+
+# ── Web ──
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.12
+
+# ── 图像 ──
+# 用 headless 版**是有意的**：服务器上没有显示器，带 GUI 的 opencv-python
+# 会拖进 libGL / libsm 等一堆 X11 依赖，`import cv2` 直接报 libGL.so.1 找不到。
+# 本机开发在 Windows 上两个版本能互换，但部署目标是 Linux，必须用这个。
+opencv-python-headless==4.11.0.86
+pillow==10.2.0
+numpy==1.26.4
+
+# 说明：starlette / pydantic 是 fastapi 的传递依赖，不单独钉版本 ——
+# 钉死了反而会在 fastapi 升版时制造无谓的冲突。
+# 权重文件不在 pip 管辖内，见 tools/fetch_weights.py 与 models/README.md。

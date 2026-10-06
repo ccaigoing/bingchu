@@ -1,0 +1,106 @@
+# CI：push 和 PR 时验证"这份代码还能不能构建/导入"。
+#
+# 刻意**不做**的事：
+#   - 不下载模型权重（519MB，且真跑推理要 CPU 几十秒，不该每次 push 都付）
+#   - 不部署（服务器上手动 `git pull && systemctl restart`，见 deploy/README.md）
+#
+# 这个工作流的职责很窄：**在合并之前发现"根本跑不起来"的问题**。
+# 它绿灯不代表功能正确，但红灯一定意味着坏了。
+
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  # ── 前端：能不能构建 ──
+  #
+  # 这一步是有真实价值的：`tsc -b` 挂在 `npm run build` 前面（见 package.json），
+  # 所以类型错误会在这里被拦下。而部署时前端是在**本机构建后 scp 上去**的
+  # （见 deploy/README.md 第 6 步）—— 构建失败意味着部署直接卡住，
+  # 与其在部署当天发现，不如 push 的时候就红。
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 类型检查 + 构建
+        run: npm run build
+
+  # ── 后端：能不能导入 ──
+  #
+  # ⚠️ 这里**故意不装 torch / ultralytics**。
+  # 二者在 app/ 里全是懒加载（只在 Detector.load / PestGate.load 里 import），
+  # 模块级 import 的只有 cv2。所以省掉这 1GB 依赖，CI 从几分钟降到几十秒，
+  # 而"能否导入"这个检查的效力一点没减 —— 语法错、循环 import、
+  # 名字写错、新加的模块忘了提交，全都还是会被抓到。
+  #
+  # 代价要说清楚：**这个检查覆盖不到"推理路径能不能跑"**。
+  # 那部分靠部署后在服务器上验证（deploy/README.md 第 9 步）。
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: 安装轻量依赖（不含推理栈）
+        run: |
+          python -m pip install --upgrade pip
+          pip install fastapi==0.115.0 "uvicorn[standard]==0.30.6" \
+                      python-multipart==0.0.12 opencv-python-headless==4.11.0.86 \
+                      pillow==10.2.0 numpy==1.26.4
+
+      - name: 语法编译检查
+        run: python -m compileall -q server/app
+
+      - name: 导入检查（能 import 就说明装配没错）
+        working-directory: server
+        run: |
+          python -c "import app.main; print('后端导入 OK')"
+
+      - name: 配置项自检
+        # 顺手确认护栏参数读得到、默认值符合预期。这几行是部署手册里
+        # 「改配置不用改代码」那句承诺的守护 —— 谁把 os.getenv 删了，这里就红。
+        working-directory: server
+        run: |
+          python -c "
+          from app.config import (RATE_PER_MIN, RATE_PER_DAY, INFER_CONCURRENCY,
+                                  UPLOAD_RETENTION_DAYS, CORS_ORIGINS)
+          assert RATE_PER_MIN > 0 and RATE_PER_DAY > 0, '限流额度不能为 0'
+          assert INFER_CONCURRENCY >= 1, '并发数至少为 1'
+          assert UPLOAD_RETENTION_DAYS > 0, '保留天数必须为正，否则上传图永不清理'
+          assert CORS_ORIGINS == [], '默认必须是不下发 CORS 头（同源部署）'
+          print('护栏配置 OK')
+          "
+
+      - name: 权重清单自检
+        # fetch_weights.py 里的 SHA256 是部署时唯一的完整性依据。
+        # 这里不下载，只确认清单结构完整、哈希格式合法 ——
+        # 一个手滑截断的哈希会让**每一次**部署都失败，而且报错指向"校验不过"，
+        # 看不出是清单本身写错了。
+        run: |
+          python -c "
+          import re, sys
+          sys.path.insert(0, 'tools')
+          from fetch_weights import WEIGHTS
+          assert WEIGHTS, '权重清单为空'
+          for name, spec in WEIGHTS.items():
+              assert name.endswith('.pt'), f'{name} 不是 .pt'
+              assert re.fullmatch(r'[0-9a-f]{64}', spec['sha256']), f'{name} 的 sha256 不合法'
+              assert spec['size'] > 0, f'{name} 的 size 不合法'
+          print(f'权重清单 OK（{len(WEIGHTS)} 个）')
+          "

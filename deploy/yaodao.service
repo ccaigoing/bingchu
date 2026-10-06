@@ -1,0 +1,79 @@
+# 「机」到病除 —— 后端 systemd unit
+#
+#     sudo cp deploy/yaodao.service /etc/systemd/system/yaodao.service
+#     sudo systemctl daemon-reload
+#     sudo systemctl enable --now yaodao
+#
+# 装完之后：
+#     systemctl status yaodao          看状态
+#     journalctl -u yaodao -f          跟日志（等价于之前的 uvicorn 输出）
+#     systemctl restart yaodao         改了代码后重启
+
+[Unit]
+Description=「机」到病除 后端 API（FastAPI + YOLO11x）
+Documentation=file:///srv/yaodao/deploy/README.md
+After=network.target
+
+[Service]
+Type=simple
+
+# 用非 root 跑。www-data 是 nginx 的用户，两边读同一批文件（dist 与 uploads）
+# 时省去权限上的来回折腾。
+# ⚠️ 前提：/srv/yaodao 下这些目录要能被 www-data 读，且
+#    server/static/uploads 与 server/data（SQLite）要能被**写**。
+#    见部署手册"权限"一节。
+User=www-data
+Group=www-data
+
+WorkingDirectory=/srv/yaodao/server
+
+# 中文日志不乱码、不丢缓冲。PYTHONUNBUFFERED 尤其重要 ——
+# 不设的话 stdout 被块缓冲，journalctl 里日志会滞后一大截，
+# 排查"服务到底起没起来"时非常误导。
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONIOENCODING=utf-8
+
+# 跑起来了就不会崩，所以没设 PYTHONFAULTHANDLER 之类的调试开关。
+# 部署护栏（限流额度、并发数、保留天数）想改就加在这里，改完
+# `systemctl daemon-reload && systemctl restart yaodao` 即可，不用改代码：
+# Environment=RATE_PER_MIN=15
+# Environment=RATE_PER_DAY=300
+# Environment=INFER_CONCURRENCY=2
+# Environment=UPLOAD_RETENTION_DAYS=30
+# Environment=CORS_ORIGINS=https://example.com
+
+# ⚠️⚠️ 不加 --workers，**必须保持单进程**。
+#
+# 两个理由，都不是性能偏好：
+#   1. services/guard.py 的限流计数与推理信号量都是**进程内**的。
+#      N 个 worker = 限额变成 N 倍，并发也变成 N 倍，护栏名义上还在、
+#      实际上已经失效 —— 这种"看起来配了其实没配"最难发现。
+#   2. 每个 worker 都要把 436MB 的 jktk_x 权重载进内存。2 核机器上
+#      开两个就是 ~2GB 单纯花在权重上，直接 OOM。
+#
+# --proxy-headers --forwarded-allow-ips：让 uvicorn 采信来自本机 nginx 的
+# X-Forwarded-For/X-Forwarded-Proto，把 request.client 还原成访客真实 IP。
+# 后端 guard.py 自己也会读 XFF，两边一致；这里配上是为了让**别的**
+# 依赖 request.client 的地方（日志、以后加的接口）也拿到正确值。
+ExecStart=/srv/yaodao/server/.venv/bin/python -m uvicorn app.main:app \
+    --host 127.0.0.1 --port 8000 \
+    --proxy-headers --forwarded-allow-ips=127.0.0.1
+
+# 崩了自动拉起。模型加载失败是降级不崩（见 detector.py），
+# 所以这里的 restart 处理的是进程级意外（OOM、被 OOM killer 杀等）。
+Restart=always
+RestartSec=5
+
+# 启动后 90 秒内没起来就算失败。三个模型加起来要载 1.5GB 左右，
+# 冷启动在低配机器上可能到十几秒，给足余量。
+TimeoutStartSec=90
+# 关停时最多等 20 秒。uvicorn 要收尾在跑的推理请求。
+TimeoutStopSec=20
+
+# 日志走 journald，不另开文件 —— 少一处会涨满磁盘的东西。
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=yaodao
+
+[Install]
+WantedBy=multi-user.target
