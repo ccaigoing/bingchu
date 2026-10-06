@@ -26,6 +26,7 @@ sys.path.insert(0, str(ROOT / "server"))
 
 from app.db import query  # noqa: E402
 from app.services import detector  # noqa: E402
+from app.services.lesion import PEST_UNKNOWN_CN, SUSPECT_CN  # noqa: E402
 
 failures: list[str] = []
 checks = 0
@@ -108,9 +109,18 @@ def main() -> int:
           f"建议 {advice_product} vs 方案A {plan_a_product}")
 
     # 识别记录 / 样本 / 图表刻度里出现的名称，必须都能对上类别字典
+    #
+    # 三个例外，都不是"字典漏了"，而是**本来就不属于字典的东西**：
+    #   「其他」        图表序列里的兜底桶
+    #   「疑似病斑」    主判型没给出结论时的哨兵（SUSPECT_CN）
+    #   「虫害（未定种）」虫害闸门判出有虫、但权重定不准种时的哨兵（PEST_UNKNOWN_CN）
+    #   后两个落库时 class_code 写 NULL —— disease_classes 是"病种/虫种"字典，
+    #   而"没结论"和"未定种"恰恰是"没有类别"。一律从代码里 import 而不是抄
+    #   字符串，改一边另一边就跟着变，不会再漂移。
     for table, col in (("detection_records", "name_cn"), ("disease_samples", "name_cn")):
         rows = query(f"SELECT DISTINCT {col} AS n FROM {table}")
-        known = {cn for cn, _ in code_classes.values()} | {"其他"}
+        known = ({cn for cn, _ in code_classes.values()}
+                 | {"其他", SUSPECT_CN, PEST_UNKNOWN_CN})
         unknown = {r["n"] for r in rows} - known
         check(not unknown, f"{table}.{col} 全部能对上类别字典",
               f"对不上的: {unknown}")

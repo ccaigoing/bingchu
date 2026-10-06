@@ -8,13 +8,16 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import uuid
 from pathlib import Path
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
-API = "http://127.0.0.1:8000/api/detect"
+# 端口可覆盖：本机常常已经有一个旧的服务占着 8000（本会话就撞到过），
+# 新起的实例只好换端口，这时用 YAODAO_API 指过来即可，不必去动别人的进程。
+API = os.environ.get("YAODAO_API", "http://127.0.0.1:8000/api/detect")
 
 DEFAULT = ["samples/v2-ba4a63f67ac673a177fbe4ecec68c30e_1440w.jpg", "samples/OIP-C.jpeg"]
 

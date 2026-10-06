@@ -7,17 +7,20 @@
 因此本页「一般预警」会显示 3、「今日已处理」会显示 4，与原 demo 的 9 / 14 不同：
 **这是修正，不是回归。**
 
-写操作（处理预警、调阈值）留给阶段二 2.5：
-阈值滑块目前只读显示，拖动后的持久化端点在那里加。
+写操作有两个（处理预警、调阈值），逻辑在 services/alerting.py。
+它们**不在** 2.5 的实时引擎里：原 demo 的「处理」按钮只改内存数组、刷新即复原，
+如果 2.4 只搬一个点了没反应的按钮，这一屏就还是个壳。所以提前把落库补上。
 
 查询逻辑写成普通函数再套路由 —— 原因见 visualize.py 顶部说明。
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field
 
 from ..db import query
+from ..services.alerting import BadValue, NotFound, handle_warning, update_threshold
 from ..services.analytics import alert_tiles, warning_counts
 from ..services.serialize import camelize_all
 
@@ -76,3 +79,35 @@ async def alert_screen() -> dict:
         "warnings": fetch_warnings(),
         "thresholds": fetch_thresholds(),
     }
+
+
+# ── 写操作 ────────────────────────────────────────────────
+
+
+class ThresholdPatch(BaseModel):
+    """只收一个 value。范围由 min_value/max_value 在服务端定义，不由请求方声明。"""
+
+    value: float = Field(description="目标值，必须落在该阈值的 minValue–maxValue 内")
+
+
+@router.post("/warnings/{warning_id}/handle")
+async def mark_handled(warning_id: int) -> dict:
+    """把一条预警标记为已处理。幂等：重复调用返回同一行，不报错。
+
+    前端点完要重取 `/api/alert` —— tile 的「严重预警」「今日已处理」是
+    COUNT 出来的，不重取就还是旧数字，tile 又和表打架了。
+    """
+    try:
+        return handle_warning(warning_id)
+    except NotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.patch("/thresholds/{key}")
+async def patch_threshold(key: str, body: ThresholdPatch) -> dict:
+    try:
+        return update_threshold(key, body.value)
+    except NotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except BadValue as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
