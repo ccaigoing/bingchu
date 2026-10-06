@@ -401,12 +401,35 @@ curl -I https://<你的域名>           # 应返回 200，且走的是 https
 在 GitHub 建一个**空仓库**（不要勾 README / .gitignore / license，否则首次推送会冲突），然后：
 
 ```bash
-git remote add origin git@github.com:<你的用户名>/<仓库名>.git
+git remote add origin https://github.com/<用户名>/<仓库名>.git
 git branch -M main
 git push -u origin main
 ```
 
-> 用 HTTPS 地址也行，但每次推送要输令牌；配了 SSH key 就免了。
+### 从国内推代码：git 要走代理
+
+直连 github.com 在国内是**间歇性**的 —— 有时 9 秒能通，有时直接
+`Recv failure: Connection was reset` 或 `Failed to connect to github.com port 443`。
+机器上通常已经跑着代理客户端（Clash 之类），但 Windows 系统代理开关可能是关的，
+所以 git 默认不走它。
+
+**用环境变量临时带上代理，别写进 git 全局配置** ——
+代理软件一关，写死的 `http.proxy` 会让 git 连任何仓库都失败：
+
+```bash
+https_proxy=http://127.0.0.1:7897 http_proxy=http://127.0.0.1:7897 \
+    git push -u origin main
+```
+
+端口按你代理客户端的实际设置改（Clash Verge / mihomo 默认是 7897）。
+经代理后实测从 9.5 秒降到 0.3 秒。
+
+> ⚠️ `netsh winhttp show proxy` 显示"无代理"**不代表真的没有** —— 它查的是
+> WinHTTP，和浏览器/git 用的 WinINET 不是一回事。要确认代理端口在不在，
+> 直接看 `netstat -ano | findstr LISTENING | findstr 7897`。
+
+首次推送会弹出 Git Credential Manager 让你登录 GitHub，选
+"Sign in with your browser" 授权一次即可，之后会记住。
 
 **校验**：仓库页面上能看到 `server/ deploy/ src/ tools/`，且 CI 的绿勾出现
 （`.github/workflows/ci.yml` 会自动跑前端构建 + 后端导入检查）。
