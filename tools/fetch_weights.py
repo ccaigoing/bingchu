@@ -10,19 +10,23 @@
 放 GitHub **Release 资产**里是正解 —— Release 单文件上限 2GB，
 三个加起来 519MB 装得下，而且带版本号和下载计数，比丢网盘可追溯得多。
 
-## 三种取法，按可靠性排序
+## 三种取法
 
-    1. --repo owner/name     从 GitHub Release 下载（正规路径，做一次就够）
-    2. --from-dir <本地目录>  从本机已有的 models/ 直接拷（最可靠，见下）
-    3. 手动 scp               本机 → 服务器，然后跑 --from-dir ./
+    1. --from-url            从权重**源站**直接下载（最快，推荐）
+    2. --repo owner/name     从 GitHub Release 下载（正规路径，做一次就够）
+    3. --from-dir <本地目录>  从本机已有的 models/ 直接拷
 
-**如果服务器在国内、拉 GitHub 很慢或超时，直接用第 2 种**：
-在你自己的电脑上（权重已经在了）跑
+**优先用 --from-url**：它直接从 HuggingFace / ultralytics 官方下载，
+不经过 GitHub，也不占用你家宽带的**上行**。436MB 从家里往上推到 GitHub
+是国内部署最容易卡死的一步，而在服务器上往下拉通常快得多。
+每个权重都列了多个源站（hf-mirror 与 HuggingFace 官方），脚本按顺序试，
+哪个通走哪个 —— 这正好对应"国内 vs 香港"两种服务器网络。
+
+**服务器连不上外网时用第 3 种**：在你自己的电脑上（权重已经在了）跑
 
     scp models/*.pt user@<服务器IP>:/srv/yaodao/models/
 
 然后在服务器上 `python tools/fetch_weights.py --from-dir /srv/yaodao/models`。
-519MB 一次性传完，不依赖任何外部站点能不能连上。
 
 ## 校验
 
@@ -60,6 +64,13 @@ WEIGHTS: dict[str, dict] = {
         "sha256": "e24887caf451239cd506fa611db25b9524430ca085aa562aecaf1b1d4e3c39bf",
         "size": 457_175_703,
         "required": True,
+        # 源站地址，按顺序试。第一个是 hf-mirror（国内快），第二个是 HuggingFace
+        # 官方（香港/海外快）—— 服务器在哪边都能走最快的那个。
+        # 两个地址实测都是 206 且 Content-Range 的字节数与 size 一致。
+        "urls": [
+            "https://hf-mirror.com/hodoly163/krishibondhu-jktk/resolve/main/jktk_x.pt",
+            "https://huggingface.co/hodoly163/krishibondhu-jktk/resolve/main/jktk_x.pt",
+        ],
     },
     "FastSAM-s.pt": {
         # 定位辅助：类无关分割，用来把泥水从病灶候选里减掉。
@@ -67,13 +78,21 @@ WEIGHTS: dict[str, dict] = {
         "sha256": "c9f78716a81c7aff0d608ccc73e1b82ab3aaad86005049f6a92106a0be6d0844",
         "size": 23_851_578,
         "required": False,   # 缺了只是定位回落纯 HSV，不崩
+        "urls": [
+            "https://github.com/ultralytics/assets/releases/download/v8.3.0/FastSAM-s.pt",
+        ],
     },
     "yolo11s-pest-ip102.pt": {
         # 虫害闸门：只回答"有没有虫"，虫种名不可采信（见 services/pest_gate.py）
         # MIT，来源 hf-mirror.com/underdogquality/yolo11s-pest-detection
+        # ⚠️ 源站文件名是 best.pt，落地时改成了现在这个名字。仓库根目录下就是它
+        #    （weights/best.pt 那个路径实测 404，别照直觉猜子目录）。
         "sha256": "810f0df179aec54f5d9762a11df4a147ff87ef79ca46649151914eeed260237f",
         "size": 38_317_890,
         "required": False,   # 缺了判型回落「疑似病斑」
+        "urls": [
+            "https://hf-mirror.com/underdogquality/yolo11s-pest-detection/resolve/main/best.pt",
+        ],
     },
 }
 
@@ -135,6 +154,7 @@ def fetch_one(
     repo: str | None,
     tag: str,
     from_dir: Path | None,
+    from_url: bool,
     force: bool,
 ) -> str:
     """取一个权重。返回 'ok' / 'skip' / 'failed'。"""
@@ -162,11 +182,30 @@ def fetch_one(
                 raise RuntimeError(f"--from-dir 指向的就是目标目录，源和目标同一个文件")
             print(f"[拷贝] {name} ← {src}")
             shutil.copy2(src, dest)
+        elif from_url:
+            # 依次试源站地址。**不因为第一个失败就放弃** —— hf-mirror 与
+            # HuggingFace 官方在不同网络下的可达性正好相反（国内 vs 海外），
+            # 多列一个就等于让脚本自己挑可达的那个。
+            urls = spec["urls"]
+            for i, url in enumerate(urls, 1):
+                try:
+                    download(url, dest, spec["size"])
+                    break
+                except RuntimeError as exc:
+                    if i == len(urls):
+                        raise RuntimeError(
+                            f"{len(urls)} 个来源都失败：\n"
+                            + "\n".join(f"  {u}" for u in urls)
+                            + f"\n  最后一次：{exc}"
+                        ) from exc
+                    print(f"        ↑ 失败（{exc}），换下一个来源")
         else:
             if not repo:
                 raise RuntimeError(
-                    "没有指定来源。用 --repo owner/name 从 Release 下载，"
-                    "或用 --from-dir 从本地目录拷贝。"
+                    "没有指定来源。三种取法：\n"
+                    "  --from-url            从权重源站下载（服务器带宽好时最快）\n"
+                    "  --repo owner/name     从 GitHub Release 下载\n"
+                    "  --from-dir <目录>     从本地已有的 models/ 拷贝"
                 )
             url = f"https://github.com/{repo}/releases/download/{tag}/{name}"
             download(url, dest, spec["size"])
@@ -194,8 +233,10 @@ def main() -> int:
     ap.add_argument("--repo", default=os.getenv("YAODAO_REPO"),
                     help="GitHub 仓库 owner/name（也可用环境变量 YAODAO_REPO）")
     ap.add_argument("--tag", default=DEFAULT_TAG, help=f"Release 标签（默认 {DEFAULT_TAG}）")
+    ap.add_argument("--from-url", action="store_true",
+                    help="从权重源站直接下载（hf-mirror / HuggingFace / GitHub 官方）")
     ap.add_argument("--from-dir", type=Path,
-                    help="改为从本地目录拷贝（服务器拉不动 GitHub 时用这个）")
+                    help="改为从本地目录拷贝（服务器拉不动外网时用这个）")
     ap.add_argument("--models-dir", type=Path, default=DEFAULT_MODELS_DIR)
     ap.add_argument("--force", action="store_true", help="已存在也重新取")
     args = ap.parse_args()
@@ -208,7 +249,7 @@ def main() -> int:
         results[name] = fetch_one(
             name, spec, args.models_dir,
             repo=args.repo, tag=args.tag,
-            from_dir=args.from_dir, force=args.force,
+            from_dir=args.from_dir, from_url=args.from_url, force=args.force,
         )
 
     ok = [n for n, r in results.items() if r == "ok"]

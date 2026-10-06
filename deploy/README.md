@@ -18,6 +18,25 @@
 
 > ⚠️ **别买 2核2G**。省下的钱会在第一次上传照片时以 OOM 的形式还回来。
 
+### 买哪个地域：**香港**
+
+| | 香港节点 | 大陆节点 |
+|---|---|---|
+| ICP 备案 | **不需要** | **需要，1–3 周** |
+| 域名可用时间 | 买完域名解析即生效 | 要等备案通过 |
+| 国内访问延迟 | 30–80ms，够用 | 最快 |
+| 月费（2核4G） | ¥30–60 | ¥60–100 |
+
+**备案看的是服务器在不在大陆，不是域名在哪注册** —— 在国内注册的域名解析到
+香港服务器，只要完成域名实名认证（几天）就能用，无需 ICP 备案。答辩有截止日期
+时，这个差别就是"今天能上线"和"等三周"。
+
+代价：国内访问比大陆节点慢一点（但比美国节点快一个量级），且理论上存在被
+墙的风险。对竞赛演示这个量级完全够用。
+
+> 香港节点还有个隐性好处：**拉 GitHub 是通的**，所以 CI、`git pull`、
+> 从 Release 取权重都不需要额外折腾代理。
+
 ### 开端口
 
 **两处都要开，只开一处是最常见的"部署完了但打不开"**：
@@ -30,8 +49,9 @@ sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
 ```
 
-> 未备案域名时，部分云厂商会拦截 80/443。被拦的话改用 8080：
-> 把 `deploy/nginx.conf` 的 `listen 80;` 改成 `listen 8080;`，
+> 香港节点不备案也能正常用 80，本节照做即可。
+> 只有**大陆节点 + 未备案域名**才会被云厂商拦 80/443，那种情况把
+> `deploy/nginx.conf` 的 `listen 80;` 改成 `listen 8080;`，
 > 访问地址相应变成 `http://<IP>:8080/`。
 
 ---
@@ -58,6 +78,10 @@ cd /srv/yaodao
 ```
 
 **校验**：`ls /srv/yaodao` 能看到 `server/ deploy/ src/ models/ tools/`。
+
+> 还没有仓库、或者仓库里没有这三个权重？**先做文末附录第 1 步**
+> （建仓库并推代码）—— 那是一次性的准备工作，代码没上云这一步就无从 clone。
+> 注意 `models/` 里只有 `README.md`，`.pt` 权重不进版本库，第 4 步单独取。
 
 ---
 
@@ -91,16 +115,27 @@ python3.11 -m venv .venv
 
 权重不进版本库（436MB 超 GitHub 单文件上限），必须单独取。
 
-### 方式一：从 GitHub Release 下载（正规路径）
+### 方式一：服务器直接从源站下载（推荐）
 
 ```bash
 cd /srv/yaodao
+.venv/bin/python tools/fetch_weights.py --from-url
+```
+
+从 HuggingFace / ultralytics 官方直接拉，**不经过 GitHub，也不占用你家宽带的上行**。
+每个权重都配了多个源站（hf-mirror 与 HuggingFace 官方），脚本按顺序试、
+哪个通走哪个。香港节点国际带宽好，实测 36MB 的权重几秒下完。
+
+### 方式二：从 GitHub Release 下载
+
+```bash
 .venv/bin/python tools/fetch_weights.py --repo <owner>/<repo>
 ```
 
-### 方式二：从本机 scp（服务器拉不动 GitHub 时用）
+需要你先按文末**附录**把三个权重传成 Release 资产。**从国内往 GitHub 推 457MB
+是最容易卡住的一步**，能走方式一就别走这条。
 
-国内服务器拉 GitHub 经常很慢或超时。你的电脑上权重已经是好的，直接传最快：
+### 方式三：从本机 scp（服务器连不上外网时用）
 
 ```bash
 # 在你自己的电脑上（Windows 的 git-bash 里）：
@@ -304,11 +339,97 @@ sudo systemctl daemon-reload && sudo systemctl restart yaodao
 
 ---
 
-## 以后要接域名和 HTTPS
+## 接域名和 HTTPS
 
-现在能做到"所有人可见"了，但地址是 `http://<IP>/`。接域名要做两件事：
+香港节点**不需要 ICP 备案**，所以这一步可以当天做完。
 
-1. **ICP 备案**（国内服务器的硬要求，通常 1–3 周）
-2. 备案通过后装 certbot 申请证书，`nginx.conf` 里加 443 server 块并 301 跳转
+### 1. 域名解析
 
-在那之前 `http://<IP>:8080/` 或 `http://<IP>/` 是可用的，答辩演示不受影响。
+在域名注册商（阿里云/腾讯云/Namesilo 都行）加一条 A 记录：
+
+```
+主机记录  @     记录值  <服务器公网IP>     TTL 600
+主机记录  www   记录值  <服务器公网IP>     TTL 600
+```
+
+**校验**：`ping <你的域名>` 解析出的 IP 是服务器 IP（DNS 生效通常几分钟到几小时）。
+**先确认这一步生效再往下走** —— certbot 是靠域名回访验证的，解析没生效必然失败。
+
+### 2. nginx 加上你的域名
+
+把 `deploy/nginx.conf` 里的 `server_name _;` 改成 `server_name <你的域名> www.<你的域名>;`，
+然后 `sudo nginx -t && sudo systemctl reload nginx`。
+
+### 3. 申请证书
+
+```bash
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d <你的域名> -d www.<你的域名>
+```
+
+certbot 会自己改写 nginx 配置、加上 443 和 80→443 跳转，并装好自动续期的 timer。
+
+**校验**：
+
+```bash
+sudo certbot renew --dry-run        # 模拟续期，应显示成功
+curl -I https://<你的域名>           # 应返回 200，且走的是 https
+```
+
+> ⚠️ 证书 90 天过期，`certbot` 装的 timer 会自动续，但**别把 nginx 配置改成
+> 让 certbot 认不出的样子**（它靠注释标记定位要改的 server 块）。
+
+### 4. 接上域名后要复查一件事
+
+`nginx.conf` 里把访客 IP 传给后端的那行（`X-Forwarded-For $remote_addr`）
+不受域名影响，但如果中途加过 CDN（Cloudflare 等），`$remote_addr` 会变成 CDN
+的地址，**限流会退化成"所有人共用一个额度"**。加 CDN 的话要改用
+`CF-Connecting-IP` 之类的真实来源头，并参见故障表那条"别人能用，你被 429"。
+
+### 还没接域名时
+
+`http://<公网IP>/` 一直是可用的，答辩演示不受影响。域名和 HTTPS 是加分项，不是前置条件。
+
+---
+
+## 附录：把代码和权重放到 GitHub
+
+第 2 步的 `git clone` 需要一个能拉的仓库，这里是一次性的准备。
+
+### 1. 建仓库并推代码
+
+在 GitHub 建一个**空仓库**（不要勾 README / .gitignore / license，否则首次推送会冲突），然后：
+
+```bash
+git remote add origin git@github.com:<你的用户名>/<仓库名>.git
+git branch -M main
+git push -u origin main
+```
+
+> 用 HTTPS 地址也行，但每次推送要输令牌；配了 SSH key 就免了。
+
+**校验**：仓库页面上能看到 `server/ deploy/ src/ tools/`，且 CI 的绿勾出现
+（`.github/workflows/ci.yml` 会自动跑前端构建 + 后端导入检查）。
+
+### 2. 把权重传成 Release 资产
+
+三个权重合计 496MB，作为**资产**挂在 Release 下（Release 单文件上限 2GB，
+而仓库里单文件只能 100MB，这就是权重不进版本库的原因）。
+
+在 GitHub 网页：**Releases → Draft a new release**
+
+- Tag：`v1.0-weights` —— **必须与 `tools/fetch_weights.py` 里的 `DEFAULT_TAG` 一致**
+- 把 `models/jktk_x.pt`、`models/FastSAM-s.pt`、`models/yolo11s-pest-ip102.pt`
+  **三个文件**拖进附件区（文件名必须保持原名，脚本按名字拼 URL）
+- 发布
+
+> ⚠️ **只传这三个。** `models/insect-detection-yolov8m.pt` 是已否决的候选 B
+> （A/B 验证过，见 `models/README.md`），传上去会让"到底用哪版权重"变得不可考。
+>
+> 457MB 从国内上传可能要很久甚至失败。**如果失败了不必死磕** ——
+> 第 4 步的方式一（服务器自己下）和方式三（scp）都不需要这一步。
+>
+> 以后换权重就换一个 tag（比如 `v1.1-weights`），**别覆盖旧的** ——
+> 覆盖会让"服务器上跑的是哪一版"无法追溯。
+
+**校验**：Release 页面三个资产都在，大小分别约 436MB / 23MB / 37MB。

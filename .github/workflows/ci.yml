@@ -102,5 +102,9 @@ jobs:
               assert name.endswith('.pt'), f'{name} 不是 .pt'
               assert re.fullmatch(r'[0-9a-f]{64}', spec['sha256']), f'{name} 的 sha256 不合法'
               assert spec['size'] > 0, f'{name} 的 size 不合法'
+              # --from-url 是部署时的首选取法，漏了 urls 键要到服务器上才会炸
+              assert spec['urls'], f'{name} 没有源站地址，--from-url 会失败'
+              for u in spec['urls']:
+                  assert u.startswith('https://'), f'{name} 的源站必须走 https：{u}'
           print(f'权重清单 OK（{len(WEIGHTS)} 个）')
           "
