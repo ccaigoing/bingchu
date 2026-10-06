@@ -30,6 +30,18 @@ def save_detection(
     now = datetime.now().isoformat(timespec="seconds")
 
     with get_conn() as conn:
+        # class_code 有外键指向 disease_classes，而「疑似病斑」(SUSPECT_CODE) 和
+        # 「虫害（未定种）」(PEST_UNKNOWN_CODE) 都是**哨兵**，不是规范类别 ——
+        # 那张字典是"病种/虫种"字典，"没结论"和"未定种"恰恰是"没有类别"。
+        # 硬写进去就是 FK 失败 → 整张上传 500（实测：任何一张 116 类映射不上的
+        # 照片都会触发，包括用户那张害虫照）。落库为 NULL 才是哨兵真实的语义。
+        # name_cn 照常写「疑似病斑」/「虫害（未定种）」，前端照常显示。
+        class_code = summary.get("topClassCode")
+        if class_code is not None and conn.execute(
+            "SELECT 1 FROM disease_classes WHERE code = ?", (class_code,)
+        ).fetchone() is None:
+            class_code = None
+
         cur = conn.execute(
             "INSERT INTO detection_records"
             " (detection_id, class_code, name_cn, confidence, severity,"
@@ -38,7 +50,7 @@ def save_detection(
             " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'upload',?)",
             (
                 detection_id,
-                summary.get("topClassCode"),
+                class_code,
                 summary.get("topClassName") or "未识别",
                 # 百分数刻度落库
                 round(float(summary.get("confidence") or 0.0) * 100, 1),

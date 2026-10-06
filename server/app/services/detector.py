@@ -75,6 +75,13 @@ ADVICE: dict[str, str] = {
     "fall_armyworm": "喷洒甲维盐 1% 乳油，用量 50 mL/亩",
 }
 
+# 判型没给出结论时的建议措辞。**按类别分岔** —— ADVICE 的兜底那句写的是
+# "确认病原"，对虫害不成立（虫不是病原）。这不是措辞讲究，是别把虫说成病。
+ADVICE_FALLBACK = {
+    "pest": "疑似虫害，建议田间取样确认虫种后再选用对口药剂",
+    "disease": "建议进一步取样送检，确认病原后再施药",
+}
+
 # 严重度分级：感染面积占比 → (等级, 中文标签)
 SEVERITY_BANDS: list[tuple[float, str, str]] = [
     (0.02, "good", "正常"),
@@ -358,6 +365,7 @@ def summarize(
     img_w: int,
     img_h: int,
     type_confidence: float | None = None,
+    type_class: tuple[str, str, str] | None = None,
 ) -> dict:
     """把原始检测列表压成前端要的 summary。
 
@@ -368,6 +376,13 @@ def summarize(
     不能拿 `dets[0].confidence` 顶替 —— 那是病灶框的贴合度，两者量级差很远
     （实测：稻瘟病判型 0.965 / 首个病灶框贴合度 0.373），混用会让识别页
     把一次高置信度的确诊显示成"置信度 37%"。
+
+    `type_class` 同理，是 `effective_class()` 判出的 (code, 中文名, 类别)。
+    ⚠️ **不要改回从 `dets[0]` 里读**：dets 按面积降序排，取首框等于把"是什么"
+    绑在"最大的那个框"上。今天所有框共用同一个类别，这么取碰巧是对的；一旦
+    框可以有不同的类别（例如将来接入害虫检测权重，虫体框与病斑框混在一起），
+    一个比病斑更大的虫体框就会顶掉判型结果，让一张纯病叶的图报出害虫名。
+    不传时才回退到首框 —— 那是退而求其次，正常调用一律显式传。
     """
     if not dets:
         return {
@@ -381,7 +396,11 @@ def summarize(
             "counts": {"disease": 0, "pest": 0, "other": 0},
         }
 
-    top = dets[0]
+    # 类别取判型结果，不取首框（理由见 docstring）
+    code, name_cn, category = (
+        type_class if type_class is not None
+        else (dets[0].code, dets[0].name_cn, dets[0].category)
+    )
 
     # 感染面积占比：各框面积并集太大不现实，这里取"各框面积之和"再截到 1，
     # 与本项目原有的 ratio 口径一致（原 demo 的 ratio 就是各病斑面积之和）。
@@ -396,7 +415,7 @@ def summarize(
         band_count[_region_of(d.center_y)] = band_count.get(_region_of(d.center_y), 0) + 1
     main_band = max(band_count, key=lambda k: band_count[k])
 
-    is_pest = top.category == "pest"
+    is_pest = category == "pest"
     unit = "处虫害" if is_pest else "处病斑"
     region_desc = f"叶片{REGION_CN[main_band]} · {len(dets)} {unit}"
 
@@ -405,9 +424,9 @@ def summarize(
         counts[d.category] = counts.get(d.category, 0) + 1
 
     return {
-        "topClassName": top.name_cn,
-        "topClassCode": top.code,
-        "category": top.category,
+        "topClassName": name_cn,
+        "topClassCode": code,
+        "category": category,
         # 诊断置信度来自 YOLO；缺省回退到最好的那个框的贴合度，但那是退而求其次
         "confidence": type_confidence if type_confidence is not None
         else max(d.confidence for d in dets),
@@ -417,8 +436,10 @@ def summarize(
         "infectedAreaRatio": round(infected, 4),
         "spotCount": len(dets),
         "regionDesc": region_desc,
-        "advice": ADVICE.get(top.code, "建议进一步取样送检，确认病原后再施药"),
-        "recommendedPlanKey": _plan_key_of(top.code),
+        # 兜底措辞按类别分岔：虫害不能套"确认病原"那句（见 ADVICE_FALLBACK）
+        "advice": ADVICE.get(code)
+        or ADVICE_FALLBACK.get(category, ADVICE_FALLBACK["disease"]),
+        "recommendedPlanKey": _plan_key_of(code),
         "counts": counts,
     }
 
